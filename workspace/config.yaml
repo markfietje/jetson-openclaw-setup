@@ -1,0 +1,24 @@
+model: zai/glm-5
+gateway.mode: local
+gateway.port: 18789
+gateway.bind: loopback
+skills.nodeManager: pnpm
+contextTokens: 64000
+reasoning: false
+
+# Channel Security - Allowlist Only
+channels:
+  signal:
+    enabled: true
+    account: "+353863363433"
+    cliPath: "signal-cli"
+    httpUrl: "http://127.0.0.1:8080"
+    autoStart: false  # Using external signal-gateway service
+    dmPolicy: "open"  # Allow anyone to DM (for testing)
+    groupPolicy: "disabled"
+    sendReadReceipts: true
+  whatsapp:
+    dmPolicy: "allowlist"
+    allowFrom:
+      - "+353863363433"  # Mark's personal number
+    groupPolicy: "disabled"
