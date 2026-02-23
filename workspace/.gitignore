@@ -1,0 +1,38 @@
+# Build artifacts
+target/
+*.rlib
+*.rmeta
+*.o
+*.a
+
+# Databases (keep backups, not live DBs)
+brain.db
+brain.db-shm
+brain.db-wal
+*.db.backup*
+
+# Binaries
+brain-server
+brain-server-*
+signal-gateway
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+
+# Old backups
+*-backup-*
+*-old
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
