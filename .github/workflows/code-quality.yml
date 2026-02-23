@@ -1,0 +1,72 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  rust-code-quality:
+    name: Rust Code Quality
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [brain-server, signal-gateway]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Rust toolchain
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
+        
+    - name: Check formatting
+      working-directory: services/${{ matrix.service }}
+      run: cargo fmt -- --check
+      
+    - name: Run clippy (lint)
+      working-directory: services/${{ matrix.service }}
+      run: cargo clippy --all-targets --all-features -- -D warnings
+      
+    - name: Check documentation
+      working-directory: services/${{ matrix.service }}
+      run: |
+        cargo doc --no-deps --all-features
+        # Check for undocumented public items
+        ! grep -r pub fn src/ | grep -v /// | grep -v //! || true
+
+  config-validation:
+    name: Validate Configuration Files
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install YAML validator
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y yamllint
+        
+    - name: Validate YAML configs
+      run: |
+        yamllint services/openclaw-config/config.yaml
+        yamllint services/signal-gateway/config.yaml || echo No config.yaml in signal-gateway
+        
+    - name: Validate systemd service files
+      run: |
+        for file in services/openclaw-config/*.service; do
+          echo Checking $file...
+          grep -q \[Unit\] $file || exit 1
+          grep -q \[Service\] $file || exit 1
+          grep -q ExecStart $file || exit 1
+        done
+        
+    - name: Validate shell scripts
+      run: |
+        sudo apt-get install -y shellcheck
+        shellcheck scripts/*.sh
