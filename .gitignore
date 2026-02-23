@@ -1,0 +1,58 @@
+# Rust
+target/
+Cargo.lock
+*.pdb
+*.db
+
+# Brain Server
+*.db
+*.db-*
+*.db.backup*
+brain-server.pid
+
+# Signal Gateway
+signal-gateway/data/
+signal-gateway/*.db
+signal-gateway.log
+
+# OpenClaw
+workspace/.openclaw/cache/
+workspace/.openclaw/state/
+workspace/.openclaw/node_modules/
+workspace/.openclaw/sessions/
+workspace/.openclaw/*.key
+workspace/.openclaw/*.token
+workspace/.openclaw/*.secret
+
+# Secrets
+*.key
+*.token
+*.secret
+*.pem
+id_rsa*
+known_hosts
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary
+*.tmp
+*.bak
+*.backup

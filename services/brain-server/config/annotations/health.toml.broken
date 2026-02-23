@@ -1,0 +1,110 @@
+[domain]
+name = "Health & Wellness"
+version = "1.0"
+description = "Supplements, nutrition, gut health, inflammation, and wellness protocols"
+
+[entities]
+supplements = [
+    "vitamin d3",
+    "vitamin k2",
+    "vitamin c",
+    "b-complex",
+    "omega-3",
+    "fish oil",
+    "magnesium",
+    "zinc",
+    "iodine",
+    "selenium",
+    "curcumin",
+    "coq10",
+    "probiotics",
+    "prebiotics",
+    "egcg",
+    "l-theanine",
+    "quercetin",
+    "resveratrol",
+    "glutamine",
+    "butyrate"
+]
+
+conditions = [
+    "inflammation",
+    "chronic inflammation",
+    "autoimmune",
+    "gut issues",
+    "leaky gut",
+    "digestive problems",
+    "thyroid problems",
+    "hypothyroidism",
+    "immune support",
+    "oxidative stress",
+    "metabolic syndrome",
+    "insulin resistance"
+]
+
+gut_health = [
+    "microbiome",
+    "gut bacteria",
+    "beneficial bacteria",
+    "probiotic",
+    "fermentation",
+    "short chain fatty acids",
+    "butyrate",
+    "intestinal permeability",
+    "gut-brain axis",
+    "enteric nervous system",
+    "serotonin",
+    "digestive health",
+    "gut lining"
+]
+
+foods = [
+    "bone broth",
+    "sauerkraut",
+    "kimchi",
+    "kefir",
+    "jerusalem artichoke",
+    "garlic",
+    "onion",
+    "asparagus",
+    "green tea",
+    "matcha",
+    "fermented foods",
+    "fatty fish",
+    "bangus",
+    "galunggong",
+    "tambakol"
+]
+
+[relations]
+treats = ["treats", "helps", "improves", "alleviates", "relieves"]
+supports = ["supports", "promotes", "enhances", "boosts", "strengthens"]
+reduces = ["reduces", "decreases", "lowers", "minimizes", "diminishes"]
+prevents = ["prevents", "protects against", "reduces risk of", "wards off"]
+causes = ["causes", "contributes to", "triggers", "worsens", "exacerbates"]
+leads_to = ["leads to", "results in", "produces", "creates"]
+contains = ["contains", "rich in", "source of", "provides", "high in"]
+requires = ["requires", "needs", "must have", "necessitates", "depends on"]
+
+[patterns]
+dosage_patterns = ["(?i)\\b[0-9,]+\\s*(IU|mg|mcg|g)\\b"]
+
+[aliases]
+omega3 = ["omega-3", "fish oil", "n-3"]
+vit_d = ["vitamin d", "vit d3", "cholecalciferol"]
+
+[high_priority_entities]
+critical = [
+    "vitamin d3",
+    "omega-3",
+    "probiotics"
+]
+
+[common_sequences]
+vitamin_d = "vitamin d3 5000 iu"
+
+[context_rules]
+health_context = ["supplement", "nutrition", "wellness"]
+
+[exclusions]
+exclude = ["just", "very", "really"]

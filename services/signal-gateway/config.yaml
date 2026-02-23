@@ -1,0 +1,6 @@
+server:
+  address: "0.0.0.0:8080"
+
+signal:
+  data_dir: "./data"
+  attachments_dir: "./data/attachments"

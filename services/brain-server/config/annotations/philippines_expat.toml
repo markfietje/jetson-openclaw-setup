@@ -1,0 +1,240 @@
+[domain]
+name = "Philippines Expat"
+version = "1.0"
+description = "13A visa process, Philippines immigration, embassy procedures, and expat living"
+
+[entities]
+# Visa types and immigration
+visas = [
+    "13a visa",
+    "13b visa",
+    "balikbayan",
+    "srrv",
+    "srrv smile",
+    "srrv classic",
+    "tourist visa",
+    "acri card",
+    "emigration clearance",
+    "immigration certificate"
+]
+
+# Locations
+locations = [
+    "kabankalan",
+    "bacolod",
+    "negros occidental",
+    "negros",
+    "manila",
+    "makati",
+    "bonifacio global city",
+    "bgc",
+    "quezon city",
+    "cebu",
+    "davao",
+    "iLOILO",
+    "dumaguete"
+]
+
+# Government offices and processes
+offices = [
+    "bureau of immigration",
+    "immigration",
+    "philippine embassy",
+    "embassy",
+    "consulate",
+    "dutch embassy",
+    "us embassy",
+    "notary public",
+    "notary",
+    "lawyer",
+    "attorney"
+]
+
+# Processes and documentation
+processes = [
+    "immigration",
+    "visa application",
+    "embassy procedures",
+    "notary services",
+    "authentication",
+    "legalization",
+    "red ribbon",
+    "police clearance",
+    "nbi clearance",
+    "medical exam",
+    "interview",
+    "biometrics"
+]
+
+# Documents
+documents = [
+    "passport",
+    "birth certificate",
+    "marriage certificate",
+    "affidavit",
+    "joint affidavit",
+    "letter of intent",
+    "certificate of legal capacity",
+    "police certificate",
+    "medical certificate",
+    "nbi clearance",
+    "authenticated document"
+]
+
+# Financial and legal
+financial = [
+    "bank statement",
+    "proof of income",
+    "financial capacity",
+    "sponsor",
+    "guarantor",
+    "retirement visa",
+    "pension"
+]
+
+# People and relationships
+people = [
+    "filipino",
+    "filipina",
+    "expat",
+    "foreigner",
+    "ofw",
+    "overseas filipino worker",
+    "balikbayan",
+    "petitioner",
+    "beneficiary",
+    "spouse",
+    "dependent"
+]
+
+[relations]
+# Process dependencies
+requires = ["requires", "needs", "must have", "necessitates"]
+before = ["before", "prior to", "preceded by", "in advance of"]
+after = ["after", "following", "subsequent to", "upon completion of"]
+step_in = ["step in", "part of", "phase of", "stage of"]
+
+# Location and jurisdiction
+located_in = ["located in", "in", "at", "based in"]
+covers = ["covers", "serves", "jurisdiction of", "service area of"]
+
+# Documentation and certification
+issued_by = ["issued by", "provided by", "obtained from"]
+authenticated_by = ["authenticated by", "notarized by", "certified by"]
+valid_for = ["valid for", "accepted in", "recognized by"]
+
+# Process actions
+submits = ["submits", "files", "applies for", "requests"]
+processes = ["processes", "handles", "manages", "approves"]
+interviews = ["interviews", "conducts interview with", "questions"]
+
+# Time and duration
+takes = ["takes", "requires", "processing time"]
+valid_until = ["valid until", "expires on", "good until"]
+
+[patterns]
+# Visa numbers and codes
+visa_patterns = [
+    "(?i)\\b(13a|13b|13-a|13-b)\\s+visa\\b",
+    "(?i)\\b(srrv|acr i-Card)\\b"
+]
+
+# Date patterns
+date_patterns = [
+    "(?i)\\b(january|february|march|april|may|june|july|august|september|october|november|december)\\s+[0-9]{1,2},?\\s+[0-9]{4}\\b",
+    "(?i)\\b[0-9]{1,2}/[0-9]{1,2}/[0-9]{2,4}\\b"
+]
+
+# Money patterns
+money_patterns = [
+    "(?i)₱[0-9,]+\\.?[0-9]*",
+    "(?i)php\\s+[0-9,]+",
+    "(?i)pesos?\\s+[0-9,]+"
+]
+
+# Document codes
+document_codes = [
+    "(?i)\\b(Form [A-Z]?[0-9]+|NBI|BI)\\b"
+]
+
+[aliases]
+# Common abbreviations and synonyms
+bi = ["bureau of immigration", "immigration", "philippine immigration"]
+nbi = ["national bureau of investigation", "police clearance"]
+dfa = ["department of foreign affairs", "philippine dfa"]
+red_ribbon = ["authentication", "legalization", "dfa authentication"]
+srrv = ["special resident retiree's visa", "retirement visa"]
+acri = ["acr i-card", "immigration card", "alien certificate"]
+
+[high_priority_entities]
+# Critical entities for Philippines immigration
+critical = [
+    "13a visa",
+    "balikbayan",
+    "philippine embassy",
+    "notary",
+    "authentication",
+    "police clearance",
+    "medical exam",
+    "immigration",
+    "kabankalan",
+    "bacolod"
+]
+
+[common_sequences]
+# Common visa application sequences
+sequence_1 = "passport → police clearance → medical exam → authentication → visa application → interview → visa issuance"
+sequence_2 = "notary → authentication → dfa → embassy → visa processing → immigration"
+sequence_3 = "letter of intent → marriage certificate → affidavit → interview → 13a visa"
+
+[context_rules]
+# Philippines-specific considerations
+philippine_context = [
+    "immigration offices often close early",
+    "processing times vary by office",
+    "bring multiple copies of documents",
+    "wear formal attire for embassy visits",
+    "expect long queues at immigration",
+    "filipino time is real - be patient"
+]
+
+# Regional differences
+regional_notes = [
+    "manila immigration: faster but busier",
+    "bacolod immigration: slower but more personal",
+    "cebu immigration: moderate processing times",
+    "negros occidental: kabankalan satellite office"
+]
+
+[exclusions]
+# Things to exclude from entity extraction
+exclude = [
+    "very",
+    "really",
+    "quite",
+    "too",
+    "also",
+    "just"
+]
+
+# === Additional Context (not processed by annotator) ===
+# Typical costs (in PHP):
+# - 13a visa application: ₱10,000-15,000
+# - balikbayan visa: free (one year)
+# - authentication: ₱100-300 per document
+# - medical exam: ₱3,000-5,000
+# - police clearance: ₱200-500
+#
+# Local terms:
+# - po/opo: respectful markers
+# - ate: older sister (respectful address to women)
+# - kuya: older brother (respectful address to men)
+# - ma'am/sir: formal address for officials
+#
+# Cultural tips:
+# - always bring extra passport photos
+# - wear formal/nice casual attire
+# - be extra polite and patient
+# - bring your own pen
+# - arrive early in the morning
+# - carry copies of everything

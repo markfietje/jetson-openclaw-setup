@@ -1,0 +1,45 @@
+[Unit]
+Description=Signal Gateway for OpenClaw
+After=network-online.target
+Wants=network-online.target
+# Require network to be fully available before starting
+
+[Service]
+Type=simple
+User=jetson
+Group=jetson
+WorkingDirectory=/var/lib/signal-gateway
+
+# Use wrapper script that ensures receiver starts
+ExecStart=/usr/local/bin/signal-gateway-wrapper.sh
+
+# Restart logic with exponential backoff
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Give service time to start receiver (health check + retries)
+TimeoutStartSec=120
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=signal-gateway
+
+# Resource limits
+LimitNOFILE=65536
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/signal-gateway
+
+# Network access required for Signal WebSocket
+PrivateDevices=false
+# Allow outbound network connections
+
+[Install]
+WantedBy=multi-user.target

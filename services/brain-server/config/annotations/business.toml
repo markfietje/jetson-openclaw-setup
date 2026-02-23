@@ -1,0 +1,158 @@
+[domain]
+name = "Business"
+version = "1.0"
+description = "Business strategy, AI consulting, tax optimization, and client management"
+
+[entities]
+# Business types and models
+business_types = [
+    "autonomous ai",
+    "ai agency",
+    "startup",
+    "freelance",
+    "consulting",
+    "s corporation",
+    "llc",
+    "sole proprietorship"
+]
+
+# Strategic concepts
+strategies = [
+    "tax optimization",
+    "revenue model",
+    "pricing strategy",
+    "client acquisition",
+    "business strategy",
+    "growth strategy",
+    "marketing strategy",
+    "competitive advantage"
+]
+
+# AI and technology
+ai_concepts = [
+    "ai agents",
+    "machine learning",
+    "automation",
+    "llm",
+    "multi-agent system",
+    "autonomous workflow"
+]
+
+# Financial terms
+financial = [
+    "revenue",
+    "profit margin",
+    "cash flow",
+    "expenses",
+    "tax deduction",
+    "tax optimization",
+    "invoice",
+    "payment terms"
+]
+
+# Client and services
+client_related = [
+    "client",
+    "customer",
+    "consulting",
+    "services",
+    "deliverables",
+    "retainer",
+    "project scope"
+]
+
+# Locations and jurisdictions
+locations = [
+    "philippines",
+    "ireland",
+    "united states",
+    "eu",
+    "offshore"
+]
+
+[relations]
+# Business operations
+generates = ["generates", "produces", "creates", "yields"]
+targets = ["targets", "focuses on", "serves", "addresses"]
+requires = ["requires", "needs", "depends on", "relies on"]
+optimizes = ["optimizes", "improves", "enhances", "streamlines"]
+reduces = ["reduces", "minimizes", "decreases", "lowers"]
+
+# Strategic relationships
+enables = ["enables", "allows", "facilitates", "makes possible"]
+supports = ["supports", "backs", "underpins", "reinforces"]
+leverages = ["leverages", "utilizes", "capitalizes on", "exploits"]
+
+# Client relationships
+serves = ["serves", "works with", "consults for", "advises"]
+bills = ["bills", "charges", "invoices", "payment from"]
+
+# Tax and financial
+deductible = ["deductible", "tax-deductible", "write-off", "expense"]
+taxes_as = ["taxes as", "classified as", "treated as"]
+
+[patterns]
+# Regex patterns for complex business terms
+business_entities = [
+    "(?i)\\b(S-Corp|S Corp|S Corporation)\\b",
+    "(?i)\\b(LLC|L.L.C.)\\b"
+]
+
+# Money and pricing
+money_patterns = [
+    "(?i)\\$[0-9,]+\\.?[0-9]*",
+    "(?i)[0-9]+% (commission|fee|rate)"
+]
+
+# Tax terms
+tax_patterns = [
+    "(?i)\\b(Form 1040|Form 2555|Foreign Earned Income)\\b",
+    "(?i)\\b(tax deduction|tax credit|write-off)\\b"
+]
+
+[aliases]
+# Common abbreviations and synonyms
+ai = ["artificial intelligence", "machine learning", "automation"]
+llc = ["limited liability company", "company"]
+s_corp = ["s corporation", "s-corp", "subchapter s"]
+revenue = ["income", "earnings", "top line", "sales"]
+
+[high_priority_entities]
+# Critical business concepts that should always be extracted
+critical = [
+    "ai agents",
+    "tax optimization",
+    "consulting",
+    "revenue",
+    "client"
+]
+
+[common_sequences]
+# Common business workflows
+stack_1 = "client acquisition → proposal → contract → delivery → invoice → payment"
+
+[context_rules]
+# Business context rules
+international_rules = [
+    "philippines: low cost of living, good for remote work",
+    "ireland: favorable corporate tax rates",
+    "offshore: requires careful tax planning"
+]
+
+[exclusions]
+# Things to exclude from entity extraction
+exclude = [
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with"
+]

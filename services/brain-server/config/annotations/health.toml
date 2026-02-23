@@ -1,0 +1,207 @@
+[domain]
+name = "Health & Wellness"
+version = "1.0"
+description = "Supplements, nutrition, gut health, inflammation, and wellness protocols"
+
+[entities]
+# Supplements and vitamins
+supplements = [
+    "vitamin d3",
+    "vitamin k2",
+    "vitamin c",
+    "b-complex",
+    "omega-3",
+    "fish oil",
+    "magnesium",
+    "zinc",
+    "iodine",
+    "selenium",
+    "curcumin",
+    "coq10",
+    "probiotics",
+    "prebiotics",
+    "egcg",
+    "l-theanine",
+    "quercetin",
+    "resveratrol",
+    "glutamine",
+    "butyrate"
+]
+
+# Health conditions and concerns
+conditions = [
+    "inflammation",
+    "chronic inflammation",
+    "autoimmune",
+    "gut issues",
+    "leaky gut",
+    "digestive problems",
+    "thyroid problems",
+    "hypothyroidism",
+    "immune support",
+    "oxidative stress",
+    "metabolic syndrome",
+    "insulin resistance"
+]
+
+# Gut health specific
+gut_health = [
+    "microbiome",
+    "gut bacteria",
+    "beneficial bacteria",
+    "probiotic",
+    "fermentation",
+    "short chain fatty acids",
+    "butyrate",
+    "intestinal permeability",
+    "gut-brain axis",
+    "enteric nervous system",
+    "serotonin",
+    "digestive health",
+    "gut lining"
+]
+
+# Foods and dietary
+foods = [
+    "bone broth",
+    "sauerkraut",
+    "kimchi",
+    "kefir",
+    "jerusalem artichoke",
+    "garlic",
+    "onion",
+    "asparagus",
+    "green tea",
+    "matcha",
+    "fermented foods",
+    "fatty fish",
+    "bangus",
+    "galunggong",
+    "tambakol"
+]
+
+# Body systems
+body_systems = [
+    "immune system",
+    "digestive system",
+    "endocrine system",
+    "nervous system",
+    "cardiovascular system",
+    "gastrointestinal tract"
+]
+
+# Wellness concepts
+wellness = [
+    "nutrient density",
+    "bioavailability",
+    "absorption",
+    "circadian rhythm",
+    "cortisol",
+    "stress management",
+    "sleep quality",
+    "energy levels",
+    "mental clarity",
+    "mood"
+]
+
+[relations]
+# Treatment and benefits
+treats = ["treats", "helps", "improves", "alleviates", "relieves"]
+supports = ["supports", "promotes", "enhances", "boosts", "strengthens"]
+reduces = ["reduces", "decreases", "lowers", "minimizes", "diminishes"]
+prevents = ["prevents", "protects against", "reduces risk of", "wards off"]
+
+# Causality and mechanisms
+causes = ["causes", "contributes to", "triggers", "worsens", "exacerbates"]
+leads_to = ["leads to", "results in", "produces", "creates"]
+
+# Composition and content
+contains = ["contains", "rich in", "source of", "provides", "high in"]
+converted_to = ["converted to", "metabolized to", "transformed into"]
+
+# Requirements and dependencies
+requires = ["requires", "needs", "must have", "necessitates", "depends on"]
+absorbed_with = ["absorbed with", "best taken with", "enhanced by"]
+
+# Deficiency and excess
+deficiency = ["deficiency", "low levels", "insufficient", "lack of"]
+toxicity = ["toxicity", "excess", "too much", "overdose"]
+
+[patterns]
+# Vitamin forms
+vitamin_forms = [
+    "(?i)\\b(vitamin [A-Z][0-9]+-[0-9]+|D3|K2 MK-7)\\b",
+    "(?i)\\b(cholecalciferol|ergocalciferol)\\b"
+]
+
+# Dosage patterns
+dosage_patterns = [
+    "(?i)\\b[0-9,]+\\s*(IU|mg|mcg|g)\\b",
+    "(?i)\\b[0-9,]+\\s*(international units?|milligrams?|micrograms?)\\b"
+]
+
+# Ratio patterns
+ratio_patterns = [
+    "(?i)\\b[0-9]+:[0-9]+\\s*(ratio|ratio\\s+(of|omega-3\\s*to\\s*omega-6))\\b"
+]
+
+# Time patterns
+time_patterns = [
+    "(?i)\\b(daily|twice daily|three times daily|every\\s+[0-9]+\\s+hours?)\\b",
+    "(?i)\\b(morning|afternoon|evening|night|before\\s+bed)\\b"
+]
+
+# Condition phrases
+condition_phrases = [
+    "(?i)\\b(good for|helps with|beneficial for|supports)\\s+(health|wellness)\\b"
+]
+
+[aliases]
+# Common abbreviations and synonyms
+omega3 = ["omega-3", "n-3", "fish oil", "fatty acids"]
+vit_d = ["vitamin d", "vit d3", "cholecalciferol", "d3"]
+vit_k2 = ["vitamin k2", "vit k2", "menaquinone", "mk-7"]
+probiotics = ["probiotic", "beneficial bacteria", "good bacteria", "gut flora"]
+curcumin = ["turmeric", "curcuma longa", "curcuminoid"]
+inflammation = ["inflammatory", "inflamed", "swelling", "redness"]
+
+[high_priority_entities]
+# Critical health concepts that should always be extracted
+critical = [
+    "vitamin d3",
+    "omega-3",
+    "probiotics",
+    "magnesium",
+    "inflammation",
+    "gut health",
+    "microbiome",
+    "immune system",
+    "thyroid"
+]
+
+[common_sequences]
+# Common supplement combinations
+stack_1 = "vitamin d3 + vitamin k2 + magnesium"
+stack_2 = "probiotics + prebiotics + fermented foods"
+stack_3 = "omega-3 + vitamin e + selenium"
+stack_4 = "curcumin + black pepper (piperine)"
+
+[context_rules]
+# Philippines-specific context
+tropical_considerations = [
+    "high temperatures affect supplement storage",
+    "increased sweating requires electrolyte replacement",
+    "tropical sun increases vitamin d needs despite paradox",
+    "humidity affects supplement stability"
+]
+
+[exclusions]
+# Things to exclude from entity extraction
+exclude = [
+    "just",
+    "very",
+    "really",
+    "quite",
+    "too",
+    "also"
+]

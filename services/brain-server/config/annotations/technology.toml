@@ -1,0 +1,226 @@
+[domain]
+name = "Technology"
+version = "1.0"
+description = "Jetson Nano development, Rust programming, AI/ML embeddings, and system architecture"
+
+[entities]
+# Hardware platforms
+hardware = [
+    "jetson nano",
+    "jetson orin",
+    "gpu",
+    "cpu",
+    "cuda",
+    "arm64",
+    "cortex-a57",
+    "neon",
+    "tegra",
+    "soc",
+    "unified memory"
+]
+
+# Programming languages and frameworks
+languages = [
+    "rust",
+    "tokio",
+    "axum",
+    "nodejs",
+    "node",
+    "typescript",
+    "javascript",
+    "python",
+    "c++",
+    "sql"
+]
+
+# AI and ML concepts
+ai_concepts = [
+    "embeddings",
+    "vectors",
+    "semantic search",
+    "knowledge graph",
+    "entity extraction",
+    "relation extraction",
+    "neural network",
+    "machine learning",
+    "model2vec",
+    "transformer",
+    "llm",
+    "inference",
+    "training"
+]
+
+# Database and storage
+databases = [
+    "sqlite",
+    "postgresql",
+    "mysql",
+    "redis",
+    "vector database",
+    "embedding database",
+    "graph database"
+]
+
+# Networking and security
+networking = [
+    "tailscale",
+    "wireguard",
+    "vpn",
+    "airvpn",
+    "firewall",
+    "iptables",
+    "ssh",
+    "port forwarding",
+    "network lock",
+    "kill switch"
+]
+
+# System and operations
+operations = [
+    "systemd",
+    "docker",
+    "kubernetes",
+    "linux",
+    "ubuntu",
+    "debian",
+    "arm",
+    "aarch64",
+    "cross-compilation",
+    "optimization"
+]
+
+# Development tools
+tools = [
+    "git",
+    "cargo",
+    "npm",
+    "pnpm",
+    "vscode",
+    "vim",
+    "terminal",
+    "cli"
+]
+
+[relations]
+# Usage and implementation
+uses = ["uses", "utilizes", "leverages", "employs", "runs on"]
+implements = ["implements", "extends", "based on", "built with", "powered by"]
+requires = ["requires", "needs", "depends on", "relies on"]
+compatible_with = ["compatible with", "works with", "supports", "integrates with"]
+
+# Performance and optimization
+optimizes = ["optimizes", "improves", "enhances", "accelerates", "speeds up"]
+reduces = ["reduces", "minimizes", "decreases", "lowers", "shrinks"]
+scales = ["scales", "handles", "processes", "manages"]
+
+# Data flow
+processes = ["processes", "handles", "transforms", "converts", "encodes"]
+stores = ["stores", "saves", "persists", "caches", "indexes"]
+retrieves = ["retrieves", "fetches", "queries", "searches", "looks up"]
+
+# Configuration
+configures = ["configures", "sets up", "config", "setup"]
+deploys = ["deploys", "deploys to", "runs on", "executes on"]
+
+[patterns]
+# Version patterns
+version_patterns = [
+    "(?i)\\b(v?[0-9]+\\.[0-9]+\\.[0-9]+|-[0-9]+\\.[0-9]+)\\b",
+    "(?i)\\b(rust [0-9]+\\.[0-9]+|node [0-9]+\\.[0-9]+)\\b"
+]
+
+# Technical specifications
+spec_patterns = [
+    "(?i)\\b[0-9]+\\s*(gb|mb|kb|tb|ghz|mhz|cores?)\\b",
+    "(?i)\\b(arm64|aarch64|x86_64)\\b"
+]
+
+# Code and command patterns
+code_patterns = [
+    "(?i)```(rust|typescript|javascript|python|bash)```",
+    "(?i)`cargo run`|`npm start`|`systemctl`"
+]
+
+# File and path patterns
+file_patterns = [
+    "(?i)\\b\\.(rs|toml|json|md|js|ts|sql|sh)\\b",
+    "(?i)\\b/usr/|/home/|/etc/|~/"
+]
+
+[aliases]
+# Common abbreviations and synonyms
+gpu = ["graphics processing unit", "graphics card", "accelerator"]
+cpu = ["central processing unit", "processor"]
+ram = ["memory", "system memory", "dram"]
+ssd = ["solid state drive", "storage", "disk"]
+api = ["application programming interface", "endpoint", "interface"]
+cli = ["command line interface", "terminal", "shell", "command line"]
+embeddings = ["vector embeddings", "semantic vectors", "word embeddings"]
+
+[high_priority_entities]
+# Critical technology concepts that should always be extracted
+critical = [
+    "jetson nano",
+    "rust",
+    "tokio",
+    "axum",
+    "embeddings",
+    "vectors",
+    "semantic search",
+    "sqlite",
+    "tailscale",
+    "firewall",
+    "cuda"
+]
+
+[common_sequences]
+# Common technology stacks
+stack_1 = "rust + tokio + axum + sqlite"
+stack_2 = "nodejs + typescript + npm"
+stack_3 = "jetson nano + cuda + python"
+stack_4 = "tailscale + wireguard + vpn"
+
+[context_rules]
+# Jetson Nano specific considerations
+jetson_constraints = [
+    "memory is the bottleneck - always check free -h",
+    "cpu is precious - avoid heavy background tasks",
+    "thermal management - monitor temperature",
+    "arm64 architecture - requires cross-compilation",
+    "gpu optimization - use cuda for parallel processing"
+]
+
+# Security best practices
+security_rules = [
+    "never block ssh port 22",
+    "always maintain secondary access",
+    "use firewall rules before enabling",
+    "test network changes before applying",
+    "preserve tailscale connectivity"
+]
+
+# Performance tips (not processed by annotator):
+# - use pnpm instead of npm
+# - enable sqlite wal mode
+# - use connection pooling
+# - implement caching strategies
+# - optimize vector embeddings
+# - use async/await for i/o operations
+
+[exclusions]
+# Things to exclude from entity extraction
+exclude = [
+    "the",
+    "a",
+    "an",
+    "and",
+    "or",
+    "but",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "of",
+    "with"
+]

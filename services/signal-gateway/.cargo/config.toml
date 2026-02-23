@@ -1,0 +1,8 @@
+[build]
+jobs = 2
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=cortex-a57", "-C", "target-feature=+neon", "-C", "link-arg=-s"]
+
+[term]
+verbose = false
