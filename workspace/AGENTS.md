@@ -34,3 +34,23 @@
 - Use brain-server for memory lookups
 - Context limit: 200K tokens
 - Session scope: per-sender
+
+## Brain Server Improvements
+
+### Agent 1: Security Fixes ✅ (2026-02-24)
+- **Status:** Complete
+- **Changes:**
+  - Replaced insecure `allow_origin(Any)` with configurable CORS
+  - Added environment variables: `CORS_ORIGINS`, `CORS_METHODS`, `CORS_HEADERS`
+  - Default to localhost origins for development
+  - Added documentation in README
+- **Branch:** `fix/security-cors-env-config`
+- **Commit:** de168a7
+
+### Agent 2: Dead Code Removal (Pending)
+- **Planned:** Remove unused RateLimiter, clean up EntityExtractor
+- **Status:** Not started
+
+### Agent 3: Performance Optimization (Pending)
+- **Planned:** Fix search pagination, add database indexes
+- **Status:** Not started
