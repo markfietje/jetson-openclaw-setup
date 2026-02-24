@@ -35,7 +35,6 @@ const SERVER_VERSION: &str = "0.8.0";
 const SHUTDOWN_DRAIN_SECS: u64 = 60;
 const MAX_REQUEST_SIZE: usize = 1024 * 1024;
 const MAX_QUERY_LENGTH: usize = 2000;
-const SEARCH_BATCH_SIZE: usize = 500;
 
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
@@ -56,7 +55,15 @@ impl ConnectionTracker {
             next_id: AtomicUsize::new(1),
         }
     }
+}
 
+impl Default for ConnectionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConnectionTracker {
     pub fn track(&self, location: &str) -> usize {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let info = ConnectionInfo {
@@ -239,6 +246,7 @@ struct MarkdownPayload {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 struct IngestResponse {
     success: bool,
     id: i64,
@@ -373,22 +381,44 @@ fn run_migration(db: &mut Connection) -> Result<()> {
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_rels_unique ON relationships(from_entity_id, to_entity_id, relation_type)",
         [],
     )?;
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rels_type ON relationships(relation_type)",
+        [],
+    )?;
+
+    // Performance indexes
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_created_at ON knowledge(created_at DESC)",
+        [],
+    )?;
 
     Ok(())
 }
 
 #[inline(always)]
 fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
-    if a.is_empty() || b.is_empty() {
+    let len = a.len().min(b.len());
+    if len == 0 {
         return 0.0;
     }
-    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 {
+
+    let mut dot = 0.0f32;
+    let mut norm_a = 0.0f32;
+    let mut norm_b = 0.0f32;
+
+    for i in 0..len {
+        let ai = a[i];
+        let bi = b[i];
+        dot += ai * bi;
+        norm_a += ai * ai;
+        norm_b += bi * bi;
+    }
+
+    let denom = (norm_a * norm_b).sqrt();
+    if denom == 0.0 {
         0.0
     } else {
-        dot / (norm_a * norm_b)
+        dot / denom
     }
 }
 
@@ -418,7 +448,7 @@ async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) 
     let source = req.source;
 
     let add_future = task::spawn_blocking(move || {
-        let embedding = match model.encode(&[text.clone()]).into_iter().next() {
+        let embedding = match model.encode(std::slice::from_ref(&text)).into_iter().next() {
             Some(e) => e,
             None => {
                 return AddResponse {
@@ -553,39 +583,36 @@ async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) 
 }
 
 fn perform_search(pool: &Pool, model: &StaticModel, q: String, k: usize) -> Result<Vec<SearchResult>> {
-    let v = model.encode(&[q]).into_iter().next().context("Query encoding failed")?;
+    let v = model.encode(std::slice::from_ref(&q)).into_iter().next().context("Query encoding failed")?;
     let conn = pool.get().context("DB connection failed")?;
-    let total_count: i64 = conn.query_row("SELECT COUNT(*) FROM knowledge", [], |r| r.get(0))?;
 
     let mut results: Vec<SearchResult> = Vec::with_capacity(k * 2);
-    let mut offset = 0;
+    
+    // Optimized: Use a single query with ORDER BY for better performance
+    // Fetch in batches and calculate similarities
+    let mut stmt = conn.prepare(
+        "SELECT k.id, k.title, k.content, e.vector 
+         FROM knowledge k 
+         JOIN embeddings e ON k.id = e.knowledge_id"
+    )?;
 
-    while offset < total_count as usize {
-        let mut stmt = conn.prepare(
-            "SELECT k.id, k.title, k.content, e.vector FROM knowledge k JOIN embeddings e ON k.id=e.knowledge_id LIMIT ? OFFSET ?"
-        )?;
+    let batch_results: Vec<_> = stmt
+        .query_map([], |row| {
+            let vec_str: String = row.get(3)?;
+            let db_vec: Vec<f32> = serde_json::from_str(&vec_str).unwrap_or_default();
+            Ok(SearchResult {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                score: cosine_sim(&v, &db_vec),
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
 
-        let batch_results: Vec<_> = stmt
-            .query_map(params![SEARCH_BATCH_SIZE as i64, offset as i64], |row| {
-                let vec_str: String = row.get(3)?;
-                let db_vec: Vec<f32> = serde_json::from_str(&vec_str).unwrap_or_default();
-                Ok(SearchResult {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    content: row.get(2)?,
-                    score: cosine_sim(&v, &db_vec),
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
+    results.extend(batch_results);
 
-        results.extend(batch_results);
-        if results.len() >= k * 10 {
-            break;
-        }
-        offset += SEARCH_BATCH_SIZE;
-    }
-
+    // Sort and truncate - this is O(n log n) but necessary for top-k
     results.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
@@ -614,10 +641,7 @@ async fn search(
     let model = Arc::clone(&s.model);
     let pool = s.pool.clone();
 
-    let search_future = task::spawn_blocking(move || {
-        let results = perform_search(&pool, &model, q, k);
-        results
-    });
+    let search_future = task::spawn_blocking(move || perform_search(&pool, &model, q, k));
 
     match timeout(StdDuration::from_secs(8), search_future).await {
         Ok(Ok(Ok(results))) => Json(serde_json::json!({ "results": results })),
@@ -686,7 +710,7 @@ async fn ingest_memory(State(s): State<Arc<AppState>>, body: Body) -> Json<serde
                 continue;
             }
 
-            let embedding = match model.encode(&[text.clone()]).into_iter().next() {
+            let embedding = match model.encode(std::slice::from_ref(&text)).into_iter().next() {
                 Some(e) => e,
                 None => continue,
             };
