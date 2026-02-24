@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::task::JoinHandle;
 
 use crate::config::Config;
-use crate::signal::{ManagerConfig, SignalHandle, SignalWorker, SignalMessage};
+use crate::signal::{ManagerConfig, SignalHandle, SignalMessage, SignalWorker};
 use crate::webhook::WebhookClient;
 
 #[derive(Clone)]
@@ -24,11 +24,11 @@ impl AppState {
             command_timeout_ms: config.signal.command_timeout_ms,
             max_sends_per_second: config.signal.max_sends_per_second,
         };
-        
+
         let worker = SignalWorker::spawn(manager_config)?;
         let signal = worker.handle();
         std::mem::forget(worker);
-        
+
         // Create webhook client if configured
         let webhook = if let Some(webhook_config) = &config.webhook {
             Some(Arc::new(WebhookClient::new(
@@ -40,7 +40,7 @@ impl AppState {
         } else {
             None
         };
-        
+
         // Start webhook forwarding task if webhook is configured
         let _webhook_task = if webhook.is_some() {
             let signal_clone = signal.clone();
@@ -52,10 +52,14 @@ impl AppState {
         } else {
             None
         };
-        
-        Ok(Self { signal, webhook, _webhook_task })
+
+        Ok(Self {
+            signal,
+            webhook,
+            _webhook_task,
+        })
     }
-    
+
     pub async fn init_signal(&self) -> Result<bool> {
         let loaded = self.signal.load_registered().await?;
         if loaded {
@@ -65,13 +69,13 @@ impl AppState {
         }
         Ok(loaded)
     }
-    
+
     /// Background task that forwards Signal messages to OpenClaw webhook
     async fn webhook_forwarder(signal: SignalHandle, webhook: Arc<WebhookClient>) {
         let mut rx = signal.subscribe();
-        
+
         tracing::info!("Webhook forwarder started");
-        
+
         loop {
             match rx.recv().await {
                 Ok(msg) => {
@@ -79,18 +83,25 @@ impl AppState {
                     if let Some(dm) = &msg.envelope.data_message {
                         if let Some(text) = &dm.message {
                             // Get sender info
-                            let sender_uuid = msg.envelope.source_uuid.as_ref().map(|s| s.as_str()).unwrap_or("unknown");
-                            let account = msg.account.as_ref().map(|s| s.as_str()).unwrap_or("unknown");
-                            
+                            let sender_uuid = msg
+                                .envelope
+                                .source_uuid
+                                .as_ref()
+                                .map(|s| s.as_str())
+                                .unwrap_or("unknown");
+                            let account = msg
+                                .account
+                                .as_ref()
+                                .map(|s| s.as_str())
+                                .unwrap_or("unknown");
+
                             tracing::info!("Forwarding message from {} to webhook", sender_uuid);
-                            
+
                             // Forward to webhook (fire and forget, log errors)
-                            if let Err(e) = webhook.forward_message(
-                                sender_uuid,
-                                sender_uuid,
-                                text,
-                                account,
-                            ).await {
+                            if let Err(e) = webhook
+                                .forward_message(sender_uuid, sender_uuid, text, account)
+                                .await
+                            {
                                 tracing::error!("Webhook forward failed: {}", e);
                             }
                         }
@@ -105,7 +116,7 @@ impl AppState {
                 }
             }
         }
-        
+
         tracing::info!("Webhook forwarder stopped");
     }
 }

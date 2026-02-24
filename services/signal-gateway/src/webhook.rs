@@ -12,22 +12,22 @@ use tokio::time::sleep;
 pub struct SignalWebhookPayload {
     /// The message text from Signal
     pub message: String,
-    
+
     /// Human-readable name for the webhook
     pub name: String,
-    
+
     /// Agent ID to route to
     pub agent_id: String,
-    
+
     /// Channel to deliver response to
     pub channel: String,
-    
+
     /// Recipient identifier (phone number)
     pub to: String,
-    
+
     /// Whether to deliver the response
     pub deliver: bool,
-    
+
     /// Wake mode (immediate or next heartbeat)
     pub wake_mode: String,
 }
@@ -126,11 +126,7 @@ impl WebhookClient {
         } else {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            Err(anyhow::anyhow!(
-                "Webhook returned {}: {}",
-                status,
-                body
-            ))
+            Err(anyhow::anyhow!("Webhook returned {}: {}", status, body))
         }
     }
 }

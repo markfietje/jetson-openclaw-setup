@@ -13,7 +13,10 @@
 use crate::state::AppState;
 use axum::{
     extract::{Path, State as AxumState},
-    response::{IntoResponse, Json, sse::{Event, Sse}},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse, Json,
+    },
     routing::{get, post},
     Router,
 };
@@ -30,22 +33,17 @@ pub fn create_router(state: AppState) -> Router {
         .route("/v1/health", get(health_check))
         .route("/v1/about", get(about_info))
         .route("/api/v1/check", get(health_check))
-
         // Account management (OpenClaw probes this)
         .route("/api/v1/accounts", get(list_accounts))
         .route("/v1/accounts/{number}", get(get_account))
-
         // Messaging
         .route("/v2/send", post(send_message_v2))
         .route("/api/v1/rpc", post(json_rpc))
-
         // Cache management (for phone -> UUID mappings)
         .route("/v1/cache/seed", post(seed_cache))
-
         // Message streams
         .route("/v1/receive/{number}", get(receive_messages))
         .route("/api/v1/events", get(events_stream))
-
         .layer(CorsLayer::permissive())
         .with_state(state)
 }
@@ -96,7 +94,12 @@ async fn health_check() -> impl IntoResponse {
 }
 
 async fn about_info(AxumState(state): AxumState<AppState>) -> impl IntoResponse {
-    let account = state.signal.get_profile().await.ok().flatten()
+    let account = state
+        .signal
+        .get_profile()
+        .await
+        .ok()
+        .flatten()
         .unwrap_or_else(|| "unknown".to_string());
 
     Json(json!({
@@ -110,9 +113,14 @@ async fn about_info(AxumState(state): AxumState<AppState>) -> impl IntoResponse 
 /// List all registered accounts - signal-cli REST API compatible
 /// This is what OpenClaw probes!
 async fn list_accounts(AxumState(state): AxumState<AppState>) -> impl IntoResponse {
-    let account = state.signal.get_profile().await.ok().flatten()
+    let account = state
+        .signal
+        .get_profile()
+        .await
+        .ok()
+        .flatten()
         .unwrap_or_else(|| "unknown".to_string());
-    
+
     // This format matches signal-cli REST API
     Json(json!([
         {
@@ -127,9 +135,14 @@ async fn list_accounts(AxumState(state): AxumState<AppState>) -> impl IntoRespon
 }
 
 async fn get_account(AxumState(state): AxumState<AppState>) -> impl IntoResponse {
-    let account = state.signal.get_profile().await.ok().flatten()
+    let account = state
+        .signal
+        .get_profile()
+        .await
+        .ok()
+        .flatten()
         .unwrap_or_else(|| "unknown".to_string());
-    
+
     Json(json!({
         "address": {
             "number": account,
@@ -178,9 +191,7 @@ async fn send_message_v2(
     Json(body): Json<SendMessageRequest>,
 ) -> impl IntoResponse {
     // Get the first recipient
-    let recipient = body.recipients.first()
-        .map(|r| r.as_str())
-        .unwrap_or("");
+    let recipient = body.recipients.first().map(|r| r.as_str()).unwrap_or("");
 
     // Handle UUID format (u:uuid) or direct UUID
     let recipient = if recipient.starts_with("u:") {
@@ -216,7 +227,7 @@ async fn json_rpc(
     Json(req): Json<JsonRpcRequest>,
 ) -> Json<JsonRpcResponse> {
     let signal = state.signal.clone();
-    
+
     let result = handle_rpc_method(&signal, &req.method, &req.params).await;
 
     match result {
@@ -229,55 +240,65 @@ async fn json_rpc(
         Err(error_msg) => Json(JsonRpcResponse {
             jsonrpc: "2.0".to_string(),
             result: None,
-            error: Some(JsonRpcError { 
-                code: -32000, 
-                message: error_msg 
+            error: Some(JsonRpcError {
+                code: -32000,
+                message: error_msg,
             }),
             id: req.id,
         }),
     }
 }
 
-async fn handle_rpc_method(signal: &crate::signal::SignalHandle, method: &str, params: &Value) -> Result<Value, String> {
+async fn handle_rpc_method(
+    signal: &crate::signal::SignalHandle,
+    method: &str,
+    params: &Value,
+) -> Result<Value, String> {
     match method {
         "sendMessage" | "send" => {
-            let recipient = params["recipient"].as_str()
-                .ok_or("missing recipient")?;
-            let message = params["message"].as_str()
-                .ok_or("missing message")?;
-            
+            let recipient = params["recipient"].as_str().ok_or("missing recipient")?;
+            let message = params["message"].as_str().ok_or("missing message")?;
+
             signal.send_message(recipient, message).await
                 .map(|id| json!({"timestamp": chrono::Utc::now().timestamp_millis(), "messageId": id}))
                 .map_err(|e| e.to_string())
         }
-        "getAccountNumber" | "about" | "getAccounts" => {
-            signal.get_profile().await
-                .map(|n| n.map(|n| json!({"number": n})).unwrap_or(json!(null)))
-                .map_err(|e| e.to_string())
-        }
-        "subscribeReceive" | "receive" | "startReceiver" => {
-            signal.start_receiver().await
-                .map(|_| json!({"result": "Receiver started"}))
-                .map_err(|e| e.to_string())
-        }
-        "stopReceiver" => {
-            signal.stop_receiver().await
-                .map(|_| json!({"result": "Receiver stopped"}))
-                .map_err(|e| e.to_string())
-        }
+        "getAccountNumber" | "about" | "getAccounts" => signal
+            .get_profile()
+            .await
+            .map(|n| n.map(|n| json!({"number": n})).unwrap_or(json!(null)))
+            .map_err(|e| e.to_string()),
+        "subscribeReceive" | "receive" | "startReceiver" => signal
+            .start_receiver()
+            .await
+            .map(|_| json!({"result": "Receiver started"}))
+            .map_err(|e| e.to_string()),
+        "stopReceiver" => signal
+            .stop_receiver()
+            .await
+            .map(|_| json!({"result": "Receiver stopped"}))
+            .map_err(|e| e.to_string()),
         "listGroups" | "getGroups" => Ok(json!({"groups": []})),
         "sendTyping" | "typing" => {
             let recipient = params["recipient"].as_str().ok_or("missing recipient")?;
-            signal.send_typing(recipient, false).await.map(|_| json!(null)).map_err(|e| e.to_string())
+            signal
+                .send_typing(recipient, false)
+                .await
+                .map(|_| json!(null))
+                .map_err(|e| e.to_string())
         }
         "sendReadReceipt" | "markRead" => Ok(json!(null)),
         "sendReaction" | "react" => {
             let recipient = params["recipient"].as_str().ok_or("missing recipient")?;
-            let target_timestamp = params["targetTimestamp"].as_u64().ok_or("missing targetTimestamp")?;
+            let target_timestamp = params["targetTimestamp"]
+                .as_u64()
+                .ok_or("missing targetTimestamp")?;
             let emoji = params["emoji"].as_str().ok_or("missing emoji")?;
             let remove = params["remove"].as_bool().unwrap_or(false);
-            
-            signal.send_reaction(recipient, target_timestamp, emoji, remove).await
+
+            signal
+                .send_reaction(recipient, target_timestamp, emoji, remove)
+                .await
                 .map(|_| json!({"timestamp": chrono::Utc::now().timestamp_millis()}))
                 .map_err(|e| e.to_string())
         }
@@ -339,7 +360,7 @@ async fn events_stream(AxumState(state): AxumState<AppState>) -> impl IntoRespon
         .keep_alive(
             axum::response::sse::KeepAlive::new()
                 .interval(Duration::from_secs(30))
-                .text("keepalive")
+                .text("keepalive"),
         )
         .into_response()
 }

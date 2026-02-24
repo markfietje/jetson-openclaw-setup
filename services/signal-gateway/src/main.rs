@@ -61,9 +61,9 @@ async fn main() -> Result<()> {
         Commands::Serve { config } => {
             let config = Config::load(&config)?;
             info!("Starting Signal Gateway v{}", env!("CARGO_PKG_VERSION"));
-            
+
             let state: AppState = AppState::new(config.clone())?;
-            
+
             // Try to load registered account
             match state.init_signal().await {
                 Ok(true) => {
@@ -95,13 +95,16 @@ async fn main() -> Result<()> {
                 .await
                 .ok();
         }
-        Commands::Link { config, device_name } => {
+        Commands::Link {
+            config,
+            device_name,
+        } => {
             let config = Config::load(&config)?;
             let state: AppState = AppState::new(config.clone())?;
-            
+
             let signal = state.signal.clone();
             let device_name = device_name.unwrap_or_else(|| "openclaw-gateway".to_string());
-            
+
             info!("Generating link URL for device: {}", device_name);
             match signal.link_secondary_device(device_name).await {
                 Ok(url) => {
@@ -144,6 +147,6 @@ async fn shutdown_signal() {
         _ = ctrl_c => info!("Received Ctrl+C"),
         _ = terminate => info!("Received SIGTERM"),
     }
-    
+
     info!("Shutting down gracefully...");
 }
