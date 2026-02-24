@@ -75,6 +75,9 @@ jobs:
           cargo clippy -- -D warnings
           cargo test --verbose
 
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Test signal-gateway
         working-directory: services/signal-gateway
         run: |
