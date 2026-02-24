@@ -1,4 +1,4 @@
-//! Brain Server v0.8.0
+//! Brain Server v0.8.1
 
 use anyhow::{Context, Result};
 use axum::{
@@ -26,16 +26,9 @@ use tower_http::cors::{Any, CorsLayer};
 use xxhash_rust::xxh3::xxh3_64;
 
 mod annotator;
+mod config;
 
 type Pool = r2d2::Pool<SqliteConnectionManager>;
-
-const MODEL_ID: &str = "minishlab/potion-retrieval-32M";
-const DEFAULT_K: usize = 5;
-const MAX_K: usize = 100;
-const SERVER_VERSION: &str = "0.8.0";
-const SHUTDOWN_DRAIN_SECS: u64 = 60;
-const MAX_REQUEST_SIZE: usize = 1024 * 1024;
-const MAX_QUERY_LENGTH: usize = 2000;
 
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
@@ -49,15 +42,6 @@ pub struct ConnectionTracker {
     next_id: AtomicUsize,
 }
 
-impl ConnectionTracker {
-    pub fn new() -> Self {
-        Self {
-            connections: Mutex::new(HashMap::new()),
-            next_id: AtomicUsize::new(1),
-        }
-    }
-}
-
 impl Default for ConnectionTracker {
     fn default() -> Self {
         Self::new()
@@ -65,6 +49,13 @@ impl Default for ConnectionTracker {
 }
 
 impl ConnectionTracker {
+    pub fn new() -> Self {
+        Self {
+            connections: Mutex::new(HashMap::new()),
+            next_id: AtomicUsize::new(1),
+        }
+    }
+
     pub fn track(&self, location: &str) -> usize {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let info = ConnectionInfo {
@@ -237,7 +228,7 @@ where
 }
 
 fn default_model() -> String {
-    MODEL_ID.to_string()
+    config::MODEL_ID.to_string()
 }
 
 #[derive(Deserialize)]
@@ -631,14 +622,14 @@ async fn search(
     if q.is_empty() {
         return Json(serde_json::json!({ "success": false, "error": "Query cannot be empty" }));
     }
-    if q.len() > MAX_QUERY_LENGTH {
+    if q.len() > config::MAX_QUERY_LENGTH {
         return Json(serde_json::json!({ "success": false, "error": "Query too long" }));
     }
     if contains_suspicious_pattern(&q) {
         return Json(serde_json::json!({ "success": false, "error": "Input contains suspicious patterns" }));
     }
 
-    let k = p.k.unwrap_or(DEFAULT_K).min(MAX_K);
+    let k = p.k.unwrap_or(config::DEFAULT_K).min(config::MAX_K);
     let model = Arc::clone(&s.model);
     let pool = s.pool.clone();
 
@@ -653,7 +644,7 @@ async fn search(
 }
 
 async fn ingest_memory(State(s): State<Arc<AppState>>, body: Body) -> Json<serde_json::Value> {
-    let content = match to_bytes(body, MAX_REQUEST_SIZE).await {
+    let content = match to_bytes(body, config::MAX_REQUEST_SIZE).await {
         Ok(b) => String::from_utf8(b.to_vec()).unwrap_or_default().trim().to_string(),
         Err(_) => String::new(),
     };
@@ -826,8 +817,8 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
     match timeout(StdDuration::from_secs(3), health_future).await {
         Ok(Ok(Ok((used_mb, total_mb, pool_state)))) => Json(serde_json::json!({
             "status": "ok",
-            "version": SERVER_VERSION,
-            "model": MODEL_ID,
+            "version": config::SERVER_VERSION,
+            "model": config::MODEL_ID,
             "system": {
                 "memory_used_mb": used_mb,
                 "memory_total_mb": total_mb,
@@ -839,7 +830,7 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
                 "busy_connections": pool_state.connections.saturating_sub(pool_state.idle_connections)
             }
         })),
-        _ => Json(serde_json::json!({ "status": "error", "version": SERVER_VERSION, "error": "Health check failed" })),
+        _ => Json(serde_json::json!({ "status": "error", "version": config::SERVER_VERSION, "error": "Health check failed" })),
     }
 }
 
@@ -865,7 +856,7 @@ async fn ready(State(s): State<Arc<AppState>>) -> impl axum::response::IntoRespo
 }
 
 async fn version() -> impl axum::response::IntoResponse {
-    SERVER_VERSION
+    config::SERVER_VERSION
 }
 
 async fn health_db(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
@@ -916,16 +907,16 @@ async fn stats(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
             "embeddings": embed_count,
             "entities": entities,
             "relationships": relationships,
-            "model": MODEL_ID,
-            "version": SERVER_VERSION
+            "model": config::MODEL_ID,
+            "version": config::SERVER_VERSION
         })),
         Ok(Ok(Err(e))) => Json(serde_json::json!({
             "count": 0,
             "embeddings": 0,
             "entities": 0,
             "relationships": 0,
-            "model": MODEL_ID,
-            "version": SERVER_VERSION,
+            "model": config::MODEL_ID,
+            "version": config::SERVER_VERSION,
             "error": e.to_string()
         })),
         Ok(Err(_)) => Json(serde_json::json!({
@@ -933,8 +924,8 @@ async fn stats(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
             "embeddings": 0,
             "entities": 0,
             "relationships": 0,
-            "model": MODEL_ID,
-            "version": SERVER_VERSION,
+            "model": config::MODEL_ID,
+            "version": config::SERVER_VERSION,
             "error": "Task join error"
         })),
         Err(_) => Json(serde_json::json!({
@@ -942,8 +933,8 @@ async fn stats(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
             "embeddings": 0,
             "entities": 0,
             "relationships": 0,
-            "model": MODEL_ID,
-            "version": SERVER_VERSION,
+            "model": config::MODEL_ID,
+            "version": config::SERVER_VERSION,
             "error": "Request timed out"
         })),
     }
@@ -1422,7 +1413,7 @@ async fn traverse_graph(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("🧠 Brain Server v{}", SERVER_VERSION);
+    println!("🧠 Brain Server v{}", config::SERVER_VERSION);
 
     let home = dirs::home_dir().context("no home directory")?;
     let db_path = home.join(".openclaw/workspace/brain.db");
@@ -1443,9 +1434,9 @@ async fn main() -> Result<()> {
     run_migration(&mut *pool.get().context("migration failed")?)?;
     println!("✅ Migration complete");
 
-    println!("🤖 Loading model: {}", MODEL_ID);
+    println!("🤖 Loading model: {}", config::MODEL_ID);
     let model = Arc::new(
-        StaticModel::from_pretrained(MODEL_ID, None, Some(true), None)
+        StaticModel::from_pretrained(config::MODEL_ID, None, Some(true), None)
             .map_err(|e| anyhow::anyhow!("Model load failed: {}", e))?,
     );
     println!("✅ Model loaded");
@@ -1555,11 +1546,11 @@ async fn main() -> Result<()> {
             }
 
             println!("\n🛑 Initiating graceful shutdown...");
-            println!("⏳ Waiting up to {} seconds for in-flight requests to complete...", SHUTDOWN_DRAIN_SECS);
+            println!("⏳ Waiting up to {} seconds for in-flight requests to complete...", config::SHUTDOWN_DRAIN_SECS);
 
             let drain_start = std::time::Instant::now();
             let drain_complete = async {
-                tokio::time::sleep(Duration::from_secs(SHUTDOWN_DRAIN_SECS)).await;
+                tokio::time::sleep(Duration::from_secs(config::SHUTDOWN_DRAIN_SECS)).await;
                 false
             };
 

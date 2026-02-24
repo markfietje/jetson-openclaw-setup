@@ -11,8 +11,6 @@ use std::{collections::HashMap, sync::Arc};
 
 pub use domains::{DomainConfig, KnowledgeDomain};
 
-pub(crate) use extractor::EntityExtractor;
-
 /// Main annotator engine
 #[derive(Clone)]
 pub struct Annotator {
@@ -46,7 +44,11 @@ impl Annotator {
 
         self.domains
             .iter()
-            .flat_map(|(&domain, config)| EntityExtractor::extract(content, title, config, domain))
+            .flat_map(|(&domain, config)| {
+                crate::annotator::extractor::EntityExtractor::extract(
+                    content, title, config, domain,
+                )
+            })
             .collect()
     }
 
