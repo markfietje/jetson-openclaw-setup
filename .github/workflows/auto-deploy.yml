@@ -194,9 +194,11 @@ jobs:
 
       - name: Build for ARM64
         working-directory: services/brain-server
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
           echo "🔨 Building brain-server for ARM64 (Jetson)..."
-          RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" \
+          RUSTFLAGS="-C target-cpu=generic -C opt-level=3" \
           cargo build --release --target aarch64-unknown-linux-gnu -j 1
 
       - name: Verify binary
@@ -373,6 +375,8 @@ jobs:
 
       - name: Build for ARM64
         working-directory: services/signal-gateway
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
           echo "🔨 Building signal-gateway for ARM64 (Jetson)..."
           cargo build --release --target aarch64-unknown-linux-gnu
