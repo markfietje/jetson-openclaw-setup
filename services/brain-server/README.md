@@ -1,4 +1,4 @@
-# Brain Server v0.8.0
+# Brain Server v0.8.1
 
 A high-performance semantic memory server with knowledge graph capabilities, optimized for ARM Cortex-A57 (Jetson Nano).
 

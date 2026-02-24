@@ -29,33 +29,41 @@
 - Health check: curl http://127.0.0.1:8765/ready
 - Gateway: curl http://localhost:18789/health
 
-## Brain Server Improvements
+## Brain Server v0.8.1 Improvements - COMPLETE ✅
 
 ### Agent 1: Security Fixes ✅ (2026-02-24)
-- **Status:** Complete
 - **Branch:** `fix/security-cors-env-config`, Commit: de168a7
+- **Changes:** Replaced insecure `allow_origin(Any)` with configurable CORS via `CORS_ORIGINS` env var
 
 ### Agent 2: Dead Code Removal ✅ (2026-02-24)
-- **Status:** Complete
-- **Changes:** Zero clippy warnings, removed unused imports, fixed clone calls
 - **Branch:** `fix/dead-code`, Commit: bc94347
+- **Changes:** Zero clippy warnings, removed unused imports, fixed clone calls
 
-### Agent 3: Performance Optimization (Pending)
-- **Planned:** Fix search pagination, add database indexes
+### Agent 3: Performance Optimization ✅ (2026-02-24)
+- **Branch:** `perf/search-optimization`, Commit: a044d04
+- **Changes:** Added database indexes, optimized search pagination
+
+### Agent 4: Configuration Module ✅ (2026-02-24)
+- **Branch:** `refactor/config-module`, Commit: a220f44
+- **Changes:** Extracted magic numbers to config.rs
+
+### Agent 5: Testing ✅ (2026-02-24)
+- **Branch:** `test/add-tests`, Commit: 067c895
+- **Changes:** Added test infrastructure
+
+### Agent 6: Error Handling & Logging ✅ (2026-02-24)
+- **Branch:** `refactor/error-handling`, Commit: eacef73
+- **Changes:** Added structured logging with tracing
+
+### Agent 7: Documentation ✅ (2026-02-24)
+- **Branch:** `docs/update-readme`
+- **Changes:** Updated README to v0.8.1, added CORS_ORIGINS env var
+
+### Agent 8: Release Preparation ✅ (2026-02-24)
+- **Changes:** Ready for release v0.8.1
 
 ## Notes
 - Keep responses concise
 - Use brain-server for memory lookups
 - Context limit: 200K tokens
 - Session scope: per-sender
-
-## Brain Server Improvements
-
-### Agent 1: Security Fixes ✅ (2026-02-24)
-- **Branch:** `fix/security-cors-env-config`, Commit: de168a7
-
-### Agent 2: Dead Code Removal ✅ (2026-02-24)
-- **Branch:** `fix/dead-code`, Commit: bc94347
-
-### Agent 3: Performance Optimization ✅ (2026-02-24)
-- **Branch:** `perf/search-optimization`, Commit: a044d04
