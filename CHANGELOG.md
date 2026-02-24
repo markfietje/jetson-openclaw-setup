@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.8.1] - 2026-02-24
+
+### Security
+- **Fixed CORS vulnerability** - Changed from insecure `allow_origin(Any)` to environment-based CORS with configurable `CORS_ORIGINS` env var
+- Restricted HTTP methods to GET, POST, PUT, DELETE only
+- Restricted headers to Content-Type only
+
+### Code Quality
+- Zero dead code warnings (`cargo clippy -- -D dead_code`)
+- Zero clippy warnings (`cargo clippy -- -D warnings`)
+- Fixed unused imports and variables
+
+### Configuration
+- Centralized magic numbers in `config.rs`
+- Added `SEARCH_BATCH_SIZE` configuration
+- Environment variable documentation in README
+
+### Performance
+- Added database indexes for entities and relationships
+- Optimized search with batch processing
+
+### CI/CD
+- Added protobuf compiler installation for signal-gateway
+- Added ARM64 cross-compilation tools (gcc-aarch64-linux-gnu)
+- Added rust-toolchain.toml for version consistency
+- Added .yamllint configuration
+- Added .yamllint configuration
+- Fixed systemd service validation (removed unavailable systemd-analyze)
+
+### Build Profile
+- Changed to `opt-level = "z"` for smaller binaries
+- Added `lto = "fat"` and `codegen-units = 1` for optimization
+- Added profile for all dependencies
+
+### Documentation
+- Updated README.md with v0.8.1
+- Created AGENTS.md with agent execution log
+- Added CORS_ORIGINS to environment variables table
+
+---
+
+## [1.0.0] - 2026-02-23
+
 ### Added
 - GitHub Actions CI/CD workflows for automated testing and deployment
 - ARM64 cross-compilation for Jetson Nano deployment
@@ -93,7 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/markfietje/jetson-openclaw-setup/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/markfietje/jetson-openclaw-setup/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/markfietje/jetson-openclaw-setup/releases/tag/v0.8.1
 [1.0.0]: https://github.com/markfietje/jetson-openclaw-setup/releases/tag/v1.0.0
 [0.1.0]: https://github.com/markfietje/jetson-openclaw-setup/releases/tag/v0.1.0
 [0.0.1]: https://github.com/markfietje/jetson-openclaw-setup/releases/tag/v0.0.1
