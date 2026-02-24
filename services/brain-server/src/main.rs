@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use axum::{
     body::{to_bytes, Body},
-    extract::{Query, State, Path},
+    extract::{Path, Query, State},
     response::Json,
     routing::{get, post},
     Router,
@@ -16,11 +16,17 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, atomic::{AtomicUsize, Ordering}, Mutex},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex,
+    },
     time::{Duration as StdDuration, Instant},
 };
 use sysinfo::System;
-use tokio::{signal, task, time::{timeout, Duration}};
+use tokio::{
+    signal, task,
+    time::{timeout, Duration},
+};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{info, warn};
 use xxhash_rust::xxh3::xxh3_64;
@@ -29,8 +35,8 @@ mod annotator;
 mod config;
 
 use config::{
-    MODEL_ID, DEFAULT_K, MAX_K, SERVER_VERSION, SHUTDOWN_DRAIN_SECS,
-    MAX_REQUEST_SIZE, MAX_QUERY_LENGTH,
+    DEFAULT_K, MAX_K, MAX_QUERY_LENGTH, MAX_REQUEST_SIZE, MODEL_ID, SERVER_VERSION,
+    SHUTDOWN_DRAIN_SECS,
 };
 
 const SEARCH_BATCH_SIZE: usize = 500;
@@ -84,7 +90,8 @@ impl ConnectionTracker {
 
     pub fn get_long_running(&self, threshold: std::time::Duration) -> Vec<ConnectionInfo> {
         if let Ok(conns) = self.connections.lock() {
-            conns.values()
+            conns
+                .values()
                 .filter(|info| info.acquired_at.elapsed() > threshold)
                 .cloned()
                 .collect()
@@ -142,9 +149,17 @@ pub fn spawn_connection_watchdog(tracker: std::sync::Arc<ConnectionTracker>) {
             interval.tick().await;
             let long_running = tracker.get_long_running(std::time::Duration::from_secs(300));
             if !long_running.is_empty() {
-                eprintln!("⚠️ WARNING: {} connection(s) held for >300s:", long_running.len());
+                eprintln!(
+                    "⚠️ WARNING: {} connection(s) held for >300s:",
+                    long_running.len()
+                );
                 for info in long_running {
-                    eprintln!(" - Connection {} at {}: {:?}", info.id, info.location, info.acquired_at.elapsed());
+                    eprintln!(
+                        " - Connection {} at {}: {:?}",
+                        info.id,
+                        info.location,
+                        info.acquired_at.elapsed()
+                    );
                 }
             }
         }
@@ -315,7 +330,8 @@ fn run_migration(db: &mut Connection) -> Result<()> {
             [],
             |r| r.get::<_, i32>(0),
         )
-        .unwrap_or(0) > 0;
+        .unwrap_or(0)
+        > 0;
 
     if !has_index {
         println!("MIGRATION: Scrubbing duplicates...");
@@ -357,8 +373,14 @@ fn run_migration(db: &mut Connection) -> Result<()> {
          )",
         [],
     )?;
-    db.execute("CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)", [])?;
-    db.execute("CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)", [])?;
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)",
+        [],
+    )?;
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)",
+        [],
+    )?;
 
     db.execute(
         "CREATE TABLE IF NOT EXISTS relationships (
@@ -374,8 +396,14 @@ fn run_migration(db: &mut Connection) -> Result<()> {
          )",
         [],
     )?;
-    db.execute("CREATE INDEX IF NOT EXISTS idx_rels_from ON relationships(from_entity_id)", [])?;
-    db.execute("CREATE INDEX IF NOT EXISTS idx_rels_to ON relationships(to_entity_id)", [])?;
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rels_from ON relationships(from_entity_id)",
+        [],
+    )?;
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rels_to ON relationships(to_entity_id)",
+        [],
+    )?;
     db.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_rels_unique ON relationships(from_entity_id, to_entity_id, relation_type)",
         [],
@@ -399,7 +427,10 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
-async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) -> Json<AddResponse> {
+async fn add_chunk(
+    State(s): State<Arc<AppState>>,
+    Json(req): Json<AddRequest>,
+) -> Json<AddResponse> {
     let text = req.text.trim().to_string();
     if text.is_empty() {
         return Json(AddResponse {
@@ -456,7 +487,8 @@ async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) 
                 [&content_hash],
                 |r| r.get::<_, i32>(0),
             )
-            .unwrap_or(0) == 1;
+            .unwrap_or(0)
+            == 1;
 
         if exists {
             return AddResponse {
@@ -559,8 +591,17 @@ async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) 
     }
 }
 
-fn perform_search(pool: &Pool, model: &StaticModel, q: String, k: usize) -> Result<Vec<SearchResult>> {
-    let v = model.encode(&[q]).into_iter().next().context("Query encoding failed")?;
+fn perform_search(
+    pool: &Pool,
+    model: &StaticModel,
+    q: String,
+    k: usize,
+) -> Result<Vec<SearchResult>> {
+    let v = model
+        .encode(&[q])
+        .into_iter()
+        .next()
+        .context("Query encoding failed")?;
     let conn = pool.get().context("DB connection failed")?;
     let total_count: i64 = conn.query_row("SELECT COUNT(*) FROM knowledge", [], |r| r.get(0))?;
 
@@ -614,17 +655,16 @@ async fn search(
         return Json(serde_json::json!({ "success": false, "error": "Query too long" }));
     }
     if contains_suspicious_pattern(&q) {
-        return Json(serde_json::json!({ "success": false, "error": "Input contains suspicious patterns" }));
+        return Json(
+            serde_json::json!({ "success": false, "error": "Input contains suspicious patterns" }),
+        );
     }
 
     let k = p.k.unwrap_or(DEFAULT_K).min(MAX_K);
     let model = Arc::clone(&s.model);
     let pool = s.pool.clone();
 
-    let search_future = task::spawn_blocking(move || {
-        
-        perform_search(&pool, &model, q, k)
-    });
+    let search_future = task::spawn_blocking(move || perform_search(&pool, &model, q, k));
 
     match timeout(StdDuration::from_secs(8), search_future).await {
         Ok(Ok(Ok(results))) => Json(serde_json::json!({ "results": results })),
@@ -636,12 +676,17 @@ async fn search(
 
 async fn ingest_memory(State(s): State<Arc<AppState>>, body: Body) -> Json<serde_json::Value> {
     let content = match to_bytes(body, MAX_REQUEST_SIZE).await {
-        Ok(b) => String::from_utf8(b.to_vec()).unwrap_or_default().trim().to_string(),
+        Ok(b) => String::from_utf8(b.to_vec())
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
         Err(_) => String::new(),
     };
 
     if content.is_empty() {
-        return Json(serde_json::json!({ "success": false, "status": "error", "message": "Empty content" }));
+        return Json(
+            serde_json::json!({ "success": false, "status": "error", "message": "Empty content" }),
+        );
     }
 
     let model = Arc::clone(&s.model);
@@ -686,7 +731,8 @@ async fn ingest_memory(State(s): State<Arc<AppState>>, body: Body) -> Json<serde
                     [&content_hash],
                     |r| r.get::<_, i32>(0),
                 )
-                .unwrap_or(0) == 1;
+                .unwrap_or(0)
+                == 1;
 
             if exists {
                 duplicates += 1;
@@ -765,7 +811,10 @@ async fn ingest_memory(State(s): State<Arc<AppState>>, body: Body) -> Json<serde
         Ok(Err(e)) => Json(serde_json::json!({ "status": "error", "error": e.to_string() })),
         Err(_) => {
             eprintln!("⚠️ ingest_memory timed out after 60s - connection potentially leaked!");
-            eprintln!("📊 Active tracked connections: {}", s.connection_tracker.count());
+            eprintln!(
+                "📊 Active tracked connections: {}",
+                s.connection_tracker.count()
+            );
             Json(serde_json::json!({ "status": "error", "error": "Ingest timed out" }))
         }
     }
@@ -802,7 +851,11 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
         let mut sys = System::new();
         sys.refresh_memory();
         let pool_state = pool.state();
-        Ok::<_, anyhow::Error>((sys.used_memory() / 1_000_000, sys.total_memory() / 1_000_000, pool_state))
+        Ok::<_, anyhow::Error>((
+            sys.used_memory() / 1_000_000,
+            sys.total_memory() / 1_000_000,
+            pool_state,
+        ))
     });
 
     match timeout(StdDuration::from_secs(3), health_future).await {
@@ -821,7 +874,9 @@ async fn health(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
                 "busy_connections": pool_state.connections.saturating_sub(pool_state.idle_connections)
             }
         })),
-        _ => Json(serde_json::json!({ "status": "error", "version": SERVER_VERSION, "error": "Health check failed" })),
+        _ => Json(
+            serde_json::json!({ "status": "error", "version": SERVER_VERSION, "error": "Health check failed" }),
+        ),
     }
 }
 
@@ -877,7 +932,9 @@ async fn health_db(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
                 "max": 20
             }
         })),
-        _ => Json(serde_json::json!({ "status": "error", "error": "Database health check failed" })),
+        _ => {
+            Json(serde_json::json!({ "status": "error", "error": "Database health check failed" }))
+        }
     }
 }
 
@@ -886,9 +943,14 @@ async fn stats(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let stats_future = task::spawn_blocking(move || {
         let conn = pool.get().map_err(|e| anyhow::anyhow!(e))?;
         let count: i64 = conn.query_row("SELECT COUNT(*) FROM knowledge", [], |r| r.get(0))?;
-        let embed_count: i64 = conn.query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get(0))?;
-        let entities: i64 = conn.query_row("SELECT COUNT(*) FROM entities", [], |r| r.get(0)).unwrap_or(0);
-        let relationships: i64 = conn.query_row("SELECT COUNT(*) FROM relationships", [], |r| r.get(0)).unwrap_or(0);
+        let embed_count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get(0))?;
+        let entities: i64 = conn
+            .query_row("SELECT COUNT(*) FROM entities", [], |r| r.get(0))
+            .unwrap_or(0);
+        let relationships: i64 = conn
+            .query_row("SELECT COUNT(*) FROM relationships", [], |r| r.get(0))
+            .unwrap_or(0);
         Ok::<_, anyhow::Error>((count, embed_count, entities, relationships))
     });
 
@@ -1022,13 +1084,21 @@ fn parse_annotations(content: &str) -> Vec<(String, String)> {
                 }
 
                 if end + 1 < len {
-                    let relation = String::from_utf8_lossy(&bytes[start..mid]).trim().to_string();
-                    let entity = String::from_utf8_lossy(&bytes[mid + 2..end]).trim().to_string();
+                    let relation = String::from_utf8_lossy(&bytes[start..mid])
+                        .trim()
+                        .to_string();
+                    let entity = String::from_utf8_lossy(&bytes[mid + 2..end])
+                        .trim()
+                        .to_string();
 
                     if !relation.is_empty()
                         && !entity.is_empty()
-                        && relation.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
-                        && entity.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                        && relation
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+                        && entity
+                            .chars()
+                            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
                     {
                         results.push((relation, entity));
                     }
@@ -1109,11 +1179,10 @@ async fn ingest_markdown(
 
     // Generate embedding for the content
     let content_for_embedding = content.clone();
-    let embedding = task::spawn_blocking(move || {
-        model.encode(&[content_for_embedding]).into_iter().next()
-    })
-    .await
-    .map_err(|_| AppError::Internal("Embedding task failed".into()))?;
+    let embedding =
+        task::spawn_blocking(move || model.encode(&[content_for_embedding]).into_iter().next())
+            .await
+            .map_err(|_| AppError::Internal("Embedding task failed".into()))?;
 
     let embedding_json = match embedding {
         Some(vec) => serde_json::to_string(&vec).map_err(|e| AppError::Internal(e.to_string()))?,
@@ -1177,7 +1246,11 @@ async fn get_entity(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    if name.len() > 100 || !name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+    if name.len() > 100
+        || !name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
         return Err(AppError::BadRequest("Invalid entity name"));
     }
 
@@ -1256,7 +1329,9 @@ async fn get_relations(
              WHERE r.to_entity_id = (SELECT id FROM entities WHERE name = ?1)"
         };
 
-        let mut stmt = conn.prepare(query).map_err(|e| AppError::Internal(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(query)
+            .map_err(|e| AppError::Internal(e.to_string()))?;
         let direction = if is_from { "out" } else { "in" };
 
         let results: Vec<_> = stmt
@@ -1289,7 +1364,11 @@ async fn traverse_graph(
     if entity.is_empty() {
         return Err(AppError::BadRequest("Entity is required"));
     }
-    if entity.len() > 100 || !entity.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+    if entity.len() > 100
+        || !entity
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
         return Err(AppError::BadRequest("Invalid entity name"));
     }
 
@@ -1414,7 +1493,10 @@ async fn main() -> Result<()> {
         warn!("Continuing without annotation features");
         annotator::Annotator::disabled()
     });
-    info!("Annotator initialized ({} domains)", annotator.domain_count());
+    info!(
+        "Annotator initialized ({} domains)",
+        annotator.domain_count()
+    );
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -1490,7 +1572,10 @@ async fn main() -> Result<()> {
             }
 
             println!("\n🛑 Initiating graceful shutdown...");
-            println!("⏳ Waiting up to {} seconds for in-flight requests to complete...", SHUTDOWN_DRAIN_SECS);
+            println!(
+                "⏳ Waiting up to {} seconds for in-flight requests to complete...",
+                SHUTDOWN_DRAIN_SECS
+            );
 
             let drain_start = std::time::Instant::now();
             let drain_complete = async {
@@ -1500,7 +1585,10 @@ async fn main() -> Result<()> {
 
             let _ = drain_complete.await;
             let elapsed = drain_start.elapsed();
-            println!("✅ Graceful shutdown complete after {:.1}s", elapsed.as_secs_f64());
+            println!(
+                "✅ Graceful shutdown complete after {:.1}s",
+                elapsed.as_secs_f64()
+            );
         })
         .await?;
 
