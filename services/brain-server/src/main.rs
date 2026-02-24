@@ -57,7 +57,15 @@ impl ConnectionTracker {
             next_id: AtomicUsize::new(1),
         }
     }
+}
 
+impl Default for ConnectionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ConnectionTracker {
     pub fn track(&self, location: &str) -> usize {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let info = ConnectionInfo {
@@ -240,6 +248,7 @@ struct MarkdownPayload {
 }
 
 #[derive(Serialize)]
+#[allow(dead_code)]
 struct IngestResponse {
     success: bool,
     id: i64,
@@ -419,7 +428,7 @@ async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) 
     let source = req.source;
 
     let add_future = task::spawn_blocking(move || {
-        let embedding = match model.encode(&[text.clone()]).into_iter().next() {
+        let embedding = match model.encode(std::slice::from_ref(&text)).into_iter().next() {
             Some(e) => e,
             None => {
                 return AddResponse {
@@ -616,8 +625,8 @@ async fn search(
     let pool = s.pool.clone();
 
     let search_future = task::spawn_blocking(move || {
-        let results = perform_search(&pool, &model, q, k);
-        results
+        
+        perform_search(&pool, &model, q, k)
     });
 
     match timeout(StdDuration::from_secs(8), search_future).await {
@@ -687,7 +696,7 @@ async fn ingest_memory(State(s): State<Arc<AppState>>, body: Body) -> Json<serde
                 continue;
             }
 
-            let embedding = match model.encode(&[text.clone()]).into_iter().next() {
+            let embedding = match model.encode(std::slice::from_ref(&text)).into_iter().next() {
                 Some(e) => e,
                 None => continue,
             };

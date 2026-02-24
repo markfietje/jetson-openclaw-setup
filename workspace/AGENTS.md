@@ -29,6 +29,20 @@
 - Health check: curl http://127.0.0.1:8765/ready
 - Gateway: curl http://localhost:18789/health
 
+## Brain Server Improvements
+
+### Agent 1: Security Fixes ✅ (2026-02-24)
+- **Status:** Complete
+- **Branch:** `fix/security-cors-env-config`, Commit: de168a7
+
+### Agent 2: Dead Code Removal ✅ (2026-02-24)
+- **Status:** Complete
+- **Changes:** Zero clippy warnings, removed unused imports, fixed clone calls
+- **Branch:** `fix/dead-code`, Commit: bc94347
+
+### Agent 3: Performance Optimization (Pending)
+- **Planned:** Fix search pagination, add database indexes
+
 ## Notes
 - Keep responses concise
 - Use brain-server for memory lookups

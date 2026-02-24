@@ -67,7 +67,9 @@ impl DomainConfig {
 
     /// Get all entities from all categories as a flat set
     pub fn all_entities(&self) -> HashSet<String> {
-        self.entities.0.values()
+        self.entities
+            .0
+            .values()
             .flatten()
             .map(|e| e.to_lowercase())
             .collect()
@@ -99,7 +101,9 @@ impl DomainConfig {
 
     /// Check if an entity is high priority
     pub fn is_high_priority(&self, entity: &str) -> bool {
-        self.high_priority.critical.iter()
+        self.high_priority
+            .critical
+            .iter()
             .any(|e| e.to_lowercase() == entity.to_lowercase())
     }
 }
@@ -200,11 +204,16 @@ impl RegexPatterns {
             ("date_patterns", &self.date_patterns),
         ];
 
-        patterns.into_iter()
+        patterns
+            .into_iter()
             .flat_map(|(category, patterns)| {
-                patterns.iter()
-                    .filter_map(|p| Regex::new(p).ok()
-                        .map(|regex| CompiledPattern { category: category.to_string(), regex, original: p.clone() }))
+                patterns.iter().filter_map(|p| {
+                    Regex::new(p).ok().map(|regex| CompiledPattern {
+                        category: category.to_string(),
+                        regex,
+                        original: p.clone(),
+                    })
+                })
             })
             .collect()
     }
@@ -299,7 +308,7 @@ exclude = ["the", "a", "an"]
         let mut config = DomainConfig::default();
         config.entities.0.insert(
             "test".to_string(),
-            vec!["Entity1".to_string(), "Entity2".to_string()]
+            vec!["Entity1".to_string(), "Entity2".to_string()],
         );
 
         let all = config.all_entities();
@@ -313,7 +322,7 @@ exclude = ["the", "a", "an"]
         let mut config = DomainConfig::default();
         config.exclusions.0.insert(
             "exclude".to_string(),
-            vec!["noise".to_string(), "the".to_string()]
+            vec!["noise".to_string(), "the".to_string()],
         );
 
         assert!(config.should_exclude("noise"));
