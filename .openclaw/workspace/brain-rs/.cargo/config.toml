@@ -1,0 +1,10 @@
+# Jetson Nano (ARM64 Cortex-A57) Optimizations
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = [
+    "-C", "target-cpu=cortex-a57",
+    "-C", "target-feature=+neon",
+]
+
+[build]
+jobs = 2

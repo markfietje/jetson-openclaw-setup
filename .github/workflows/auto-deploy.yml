@@ -1,0 +1,349 @@
+name: Auto Deploy to Jetson
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/brain-server/**'
+      - 'services/signal-gateway/**'
+      - 'scripts/**'
+      - 'services/openclaw-config/**'
+      - '.github/workflows/auto-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      deploy_brain_server:
+        description: 'Deploy Brain Server'
+        required: false
+        default: true
+        type: boolean
+      deploy_signal_gateway:
+        description: 'Deploy Signal Gateway'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  JETSON_USER: jetson
+  JETSON_HOST: jetson
+
+jobs:
+  build-and-deploy-brain-server:
+    name: Build & Deploy Brain Server
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deploy_brain_server != 'false' || github.event_name == 'push'
+
+    outputs:
+      deployed: ${{ steps.deploy.outputs.success }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: services/brain-server/target
+          key: ${{ runner.os }}-cargo-build-target-arm64-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
+
+      - name: Build for ARM64
+        working-directory: services/brain-server
+        run: |
+          echo "🔨 Building brain-server for ARM64 (Jetson)..."
+          RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" \
+          cargo build --release --target aarch64-unknown-linux-gnu -j 1
+
+      - name: Verify binary
+        working-directory: services/brain-server
+        run: |
+          echo "✅ Verifying ARM64 binary..."
+          test -f target/aarch64-unknown-linux-gnu/release/brain-server
+          file target/aarch64-unknown-linux-gnu/release/brain-server | grep -q "ARM aarch64"
+          ls -lh target/aarch64-unknown-linux-gnu/release/brain-server
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.JETSON_SSH_KNOWN_HOSTS }}
+        run: |
+          echo "🔑 Setting up SSH access..."
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh-keyscan -H $JETSON_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to Jetson
+        id: deploy
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "🚀 Deploying brain-server to Jetson..."
+
+          # Create remote directory
+          ssh ${JETSON_USER}@${JETSON_HOST} "mkdir -p ~/brain-server"
+
+          # Copy binary
+          scp services/brain-server/target/aarch64-unknown-linux-gnu/release/brain-server \
+            ${JETSON_USER}@${JETSON_HOST}:~/brain-server/brain-server.new
+
+          # Install binary
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo cp ~/brain-server/brain-server.new /usr/local/bin/brain-server && \
+             sudo chmod +x /usr/local/bin/brain-server && \
+             rm ~/brain-server/brain-server.new"
+
+          # Restart service
+          echo "🔄 Restarting brain-server service..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl restart brain-server.service"
+
+          # Wait for service to start
+          sleep 3
+
+          # Check service status
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl status brain-server.service --no-pager"
+
+          # Test API
+          echo "🧪 Testing brain-server API..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s http://localhost:8765/health" | jq .
+
+          echo "✅ Brain server deployed successfully!"
+          echo "success=true" >> $GITHUB_OUTPUT
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519
+
+  build-and-deploy-signal-gateway:
+    name: Build & Deploy Signal Gateway
+    runs-on: ubuntu-latest
+    if: github.event.inputs.deploy_signal_gateway != 'false' || github.event_name == 'push'
+
+    outputs:
+      deployed: ${{ steps.deploy.outputs.success }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: services/signal-gateway/target
+          key: ${{ runner.os }}-cargo-build-target-arm64-${{ hashFiles('services/signal-gateway/**/Cargo.lock') }}
+
+      - name: Build for ARM64
+        working-directory: services/signal-gateway
+        run: |
+          echo "🔨 Building signal-gateway for ARM64 (Jetson)..."
+          cargo build --release --target aarch64-unknown-linux-gnu
+
+      - name: Verify binary
+        working-directory: services/signal-gateway
+        run: |
+          echo "✅ Verifying ARM64 binary..."
+          test -f target/aarch64-unknown-linux-gnu/release/signal-gateway
+          file target/aarch64-unknown-linux-gnu/release/signal-gateway | grep -q "ARM aarch64"
+          ls -lh target/aarch64-unknown-linux-gnu/release/signal-gateway
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.JETSON_SSH_KNOWN_HOSTS }}
+        run: |
+          echo "🔑 Setting up SSH access..."
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh-keyscan -H $JETSON_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to Jetson
+        id: deploy
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "🚀 Deploying signal-gateway to Jetson..."
+
+          # Create remote directory
+          ssh ${JETSON_USER}@${JETSON_HOST} "mkdir -p ~/signal-gateway"
+
+          # Copy binary
+          scp services/signal-gateway/target/aarch64-unknown-linux-gnu/release/signal-gateway \
+            ${JETSON_USER}@${JETSON_HOST}:~/signal-gateway/signal-gateway.new
+
+          # Install binary
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo cp ~/signal-gateway/signal-gateway.new /usr/local/bin/signal-gateway && \
+             sudo chmod +x /usr/local/bin/signal-gateway && \
+             rm ~/signal-gateway/signal-gateway.new"
+
+          # Copy wrapper script
+          scp scripts/signal-gateway-wrapper.sh \
+            ${JETSON_USER}@${JETSON_HOST}:~/signal-gateway-wrapper.sh
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo cp ~/signal-gateway-wrapper.sh /usr/local/bin/ && \
+             sudo chmod +x /usr/local/bin/signal-gateway-wrapper.sh && \
+             rm ~/signal-gateway-wrapper.sh"
+
+          # Restart service
+          echo "🔄 Restarting signal-gateway service..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl restart signal-gateway.service"
+
+          # Wait for service to start
+          sleep 3
+
+          # Check service status
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl status signal-gateway.service --no-pager"
+
+          # Test API
+          echo "🧪 Testing signal-gateway API..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s http://localhost:8080/v1/health" | jq .
+
+          echo "✅ Signal gateway deployed successfully!"
+          echo "success=true" >> $GITHUB_OUTPUT
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519
+
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: [build-and-deploy-brain-server, build-and-deploy-signal-gateway]
+    if: always()
+
+    steps:
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.JETSON_SSH_KNOWN_HOSTS }}
+        run: |
+          echo "🔑 Setting up SSH access..."
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Check all services
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "📊 Checking service status..."
+
+          # Check brain-server
+          echo "🧠 Brain Server:"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl is-active brain-server.service && echo '✅ Running' || echo '❌ Failed'"
+
+          # Check signal-gateway
+          echo "📡 Signal Gateway:"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl is-active signal-gateway.service && echo '✅ Running' || echo '❌ Failed'"
+
+          # Test endpoints
+          echo ""
+          echo "🧪 Testing endpoints..."
+
+          echo "Brain Server Health:"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s http://localhost:8765/health | jq -c '.status'"
+
+          echo "Signal Gateway Health:"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s http://localhost:8080/v1/health | jq -c '.status'"
+
+          echo ""
+          echo "✅ Deployment verification complete!"
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519
+
+  notify-status:
+    name: Deployment Status
+    runs-on: ubuntu-latest
+    needs: [build-and-deploy-brain-server, build-and-deploy-signal-gateway, verify-deployment]
+    if: always()
+
+    steps:
+      - name: Determine status
+        id: status
+        run: |
+          if [ "${{ needs.build-and-deploy-brain-server.result }}" == "success" ] && \
+             [ "${{ needs.build-and-deploy-signal-gateway.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "emoji=🚀" >> $GITHUB_OUTPUT
+            echo "message=All services deployed successfully!" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed - check logs" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Report status
+        run: |
+          echo "${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.message }}"
+          echo "Brain Server: ${{ needs.build-and-deploy-brain-server.result }}"
+          echo "Signal Gateway: ${{ needs.build-and-deploy-signal-gateway.result }}"
+
+          exit ${{ steps.status.outputs.status == 'success' && '0' || '1' }}

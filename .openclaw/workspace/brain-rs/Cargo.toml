@@ -1,0 +1,45 @@
+[package]
+name = "brain-server"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+# Core Embedding
+model2vec-rs = "0.1.4"
+
+# Database Stack - Verified Absolute Latest
+rusqlite = { version = "0.38.0", features = ["bundled"] }
+r2d2 = "0.8.10"
+r2d2_sqlite = "0.32.0"
+
+# Async Stack - Axum 0.8.x Standard
+axum = "0.8.8"
+hyper = "1.8.1"
+tower-http = { version = "0.6.8", features = ["cors"] }
+tokio = { version = "1.49.0", features = ["full"] }
+
+# Serialization - Latest Releases
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+
+# Regex for knowledge graph parsing
+regex = "1.11"
+
+# Performance Utilities
+anyhow = "1.0.101"
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+chrono = "0.4.43"
+dirs = "6.0.0"
+sysinfo = "0.38.1"
+
+[profile.release]
+opt-level = 2
+lto = false
+codegen-units = 16
+panic = "abort"
+strip = true
+debug = false
+rpath = false
+
+[profile.dev]
+opt-level = 1

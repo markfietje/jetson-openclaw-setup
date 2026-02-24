@@ -1,0 +1,699 @@
+//! Brain Server v0.6.4
+
+use anyhow::{Context, Result};
+use axum::{
+    extract::{Query, State},
+    response::Json,
+    routing::{get, post},
+    Router,
+};
+use model2vec_rs::model::StaticModel;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::{params, Connection};
+use serde::{Deserialize, Serialize};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{signal, task};
+use tower_http::cors::{Any, CorsLayer};
+use xxhash_rust::xxh3::xxh3_64;
+
+type Pool = r2d2::Pool<SqliteConnectionManager>;
+const MODEL_ID: &str = "minishlab/potion-retrieval-32M";
+const DEFAULT_K: usize = 5;
+const MAX_K: usize = 100;
+
+struct AppState {
+    model: Arc<StaticModel>,
+    pool: Pool,
+}
+
+#[derive(Deserialize)]
+struct SearchParams {
+    q: String,
+    #[serde(default)]
+    k: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct SearchResult {
+    id: i64,
+    #[serde(rename = "similarity")]
+    score: f32,
+    title: Option<String>,
+    content: String,
+}
+
+#[derive(Deserialize)]
+struct AddRequest {
+    text: String,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default = "default_source")]
+    source: String,
+}
+
+#[derive(Serialize)]
+struct AddResponse {
+    success: bool,
+    status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chunk_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+fn default_source() -> String {
+    "manual".to_string()
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct EmbeddingsRequest {
+    input: String,
+    #[serde(default = "default_model")]
+    model: String,
+}
+
+fn default_model() -> String {
+    MODEL_ID.to_string()
+}
+
+fn run_migration(db: &mut Connection) -> Result<()> {
+    db.execute_batch(
+        "PRAGMA journal_mode=WAL; \
+         PRAGMA synchronous=NORMAL; \
+         PRAGMA foreign_keys=ON; \
+         PRAGMA cache_size=-64000; \
+         PRAGMA temp_store=MEMORY;",
+    )?;
+
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS knowledge(
+            id INTEGER PRIMARY KEY,
+            title TEXT,
+            content TEXT NOT NULL,
+            knowledge_type TEXT,
+            source TEXT DEFAULT 'manual',
+            content_hash TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ); \
+         CREATE TABLE IF NOT EXISTS embeddings(
+            knowledge_id INTEGER PRIMARY KEY,
+            vector TEXT,
+            FOREIGN KEY(knowledge_id) REFERENCES knowledge(id) ON DELETE CASCADE
+        );",
+    )?;
+
+    let has_index: bool = db
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_knowledge_hash'",
+            [],
+            |r| r.get::<_, i32>(0),
+        )
+        .unwrap_or(0)
+        > 0;
+
+    if !has_index {
+        println!("MIGRATION: Scrubbing duplicates...");
+
+        let rows: Vec<(i64, String)> = db
+            .prepare("SELECT id, content FROM knowledge WHERE content_hash IS NULL")?
+            .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let tx = db.transaction()?;
+        for (id, content) in rows {
+            let h = format!("{:016x}", xxh3_64(content.trim().as_bytes()));
+            tx.execute(
+                "UPDATE knowledge SET content_hash=? WHERE id=?",
+                params![h, id],
+            )?;
+        }
+        tx.commit()?;
+
+        db.execute(
+            "DELETE FROM knowledge WHERE id NOT IN (SELECT MIN(id) FROM knowledge GROUP BY content_hash)",
+            [],
+        )?;
+        db.execute(
+            "CREATE UNIQUE INDEX idx_knowledge_hash ON knowledge(content_hash)",
+            [],
+        )?;
+        println!("MIGRATION: Complete");
+    }
+
+    Ok(())
+}
+
+#[inline(always)]
+fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 {
+        0.0
+    } else {
+        dot / (norm_a * norm_b)
+    }
+}
+
+async fn add_chunk(State(s): State<Arc<AppState>>, Json(req): Json<AddRequest>) -> Json<AddResponse> {
+    let text = req.text.trim().to_string();
+    if text.is_empty() {
+        return Json(AddResponse {
+            success: false,
+            status: "error".to_string(),
+            chunk_id: None,
+            error: Some("text cannot be empty".to_string()),
+        });
+    }
+
+    let model = Arc::clone(&s.model);
+    let pool = s.pool.clone();
+    let title = req.title.filter(|t| !t.is_empty());
+    let source = req.source;
+
+    let result = task::spawn_blocking(move || {
+        let embedding = match model.encode(&[text.clone()]).into_iter().next() {
+            Some(e) => e,
+            None => {
+                return AddResponse {
+                    success: false,
+                    status: "error".to_string(),
+                    chunk_id: None,
+                    error: Some("Embedding generation failed".to_string()),
+                };
+            }
+        };
+
+        let content_hash = format!("{:016x}", xxh3_64(text.as_bytes()));
+
+        let mut conn = match pool.get() {
+            Ok(c) => c,
+            Err(e) => {
+                return AddResponse {
+                    success: false,
+                    status: "error".to_string(),
+                    chunk_id: None,
+                    error: Some(format!("DB connection failed: {}", e)),
+                };
+            }
+        };
+
+        let exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM knowledge WHERE content_hash=? LIMIT 1",
+                [&content_hash],
+                |r| r.get::<_, i32>(0),
+            )
+            .unwrap_or(0)
+            == 1;
+
+        if exists {
+            return AddResponse {
+                success: true,
+                status: "duplicate".to_string(),
+                chunk_id: Some(0),
+                error: None,
+            };
+        }
+
+        let tx = match conn.transaction() {
+            Ok(t) => t,
+            Err(e) => {
+                return AddResponse {
+                    success: false,
+                    status: "error".to_string(),
+                    chunk_id: None,
+                    error: Some(format!("Transaction failed: {}", e)),
+                };
+            }
+        };
+
+        if let Err(e) = tx.execute(
+            "INSERT INTO knowledge(content, title, source, content_hash) VALUES(?, ?, ?, ?)",
+            params![text, title, source, content_hash],
+        ) {
+            return AddResponse {
+                success: false,
+                status: "error".to_string(),
+                chunk_id: None,
+                error: Some(format!("Insert failed: {}", e)),
+            };
+        }
+
+        let chunk_id = tx.last_insert_rowid();
+        if chunk_id > 0 {
+            let vector_str = match serde_json::to_string(&embedding) {
+                Ok(v) => v,
+                Err(e) => {
+                    return AddResponse {
+                        success: false,
+                        status: "error".to_string(),
+                        chunk_id: None,
+                        error: Some(format!("Vector serialization failed: {}", e)),
+                    };
+                }
+            };
+
+            if let Err(e) = tx.execute(
+                "INSERT INTO embeddings(knowledge_id, vector) VALUES(?, ?)",
+                params![chunk_id, vector_str],
+            ) {
+                return AddResponse {
+                    success: false,
+                    status: "error".to_string(),
+                    chunk_id: None,
+                    error: Some(format!("Embedding insert failed: {}", e)),
+                };
+            }
+
+            if let Err(e) = tx.commit() {
+                return AddResponse {
+                    success: false,
+                    status: "error".to_string(),
+                    chunk_id: None,
+                    error: Some(format!("Commit failed: {}", e)),
+                };
+            }
+
+            AddResponse {
+                success: true,
+                status: "created".to_string(),
+                chunk_id: Some(chunk_id),
+                error: None,
+            }
+        } else {
+            AddResponse {
+                success: false,
+                status: "error".to_string(),
+                chunk_id: None,
+                error: Some("Failed to get chunk_id".to_string()),
+            }
+        }
+    })
+    .await;
+
+    match result {
+        Ok(resp) => Json(resp),
+        Err(e) => Json(AddResponse {
+            success: false,
+            status: "error".to_string(),
+            chunk_id: None,
+            error: Some(format!("Task join error: {}", e)),
+        }),
+    }
+}
+
+fn perform_search(pool: &Pool, model: &StaticModel, q: String, k: usize) -> Result<Vec<SearchResult>> {
+    let v = model.encode(&[q]).into_iter().next().context("Query encoding failed")?;
+    
+    let conn = pool.get().context("DB connection failed")?;
+    
+    let mut stmt = conn
+        .prepare("SELECT k.id, k.title, k.content, e.vector FROM knowledge k JOIN embeddings e ON k.id=e.knowledge_id")?;
+    
+    let mut results: Vec<_> = stmt
+        .query_map([], |row| {
+            let vec_str: String = row.get(3)?;
+            let db_vec: Vec<f32> = serde_json::from_str(&vec_str).unwrap_or_default();
+            Ok(SearchResult {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                score: cosine_sim(&v, &db_vec),
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    results.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    results.truncate(k);
+    Ok(results)
+}
+
+async fn search(
+    State(s): State<Arc<AppState>>,
+    Query(p): Query<SearchParams>,
+) -> Json<serde_json::Value> {
+    let q = p.q.trim().to_string();
+    if q.is_empty() {
+        return Json(serde_json::json!({
+            "success": false,
+            "error": "Query cannot be empty"
+        }));
+    }
+
+    let k = p.k.unwrap_or(DEFAULT_K).min(MAX_K);
+    let model = Arc::clone(&s.model);
+    let pool = s.pool.clone();
+
+    let res = task::spawn_blocking(move || perform_search(&pool, &model, q, k))
+        .await
+        .ok()
+        .and_then(|r| r.ok());
+
+    match res {
+        Some(results) => Json(serde_json::json!({
+            "success": true,
+            "results": results
+        })),
+        None => Json(serde_json::json!({
+            "success": false,
+            "error": "Search failed"
+        })),
+    }
+}
+
+async fn ingest_memory(
+    State(s): State<Arc<AppState>>,
+    body: String,
+) -> Json<serde_json::Value> {
+    let content = body.trim().to_string();
+
+    if content.is_empty() {
+        return Json(serde_json::json!({
+            "success": false,
+            "status": "error",
+            "message": "Empty content"
+        }));
+    }
+
+    let model = Arc::clone(&s.model);
+    let pool = s.pool.clone();
+
+    let result = task::spawn_blocking(move || {
+        let entries = parse_memory_content(&content);
+        if entries.is_empty() {
+            return AddResponse {
+                success: false,
+                status: "error".to_string(),
+                chunk_id: None,
+                error: Some("No valid entries found".to_string()),
+            };
+        }
+
+        let mut conn = match pool.get() {
+            Ok(c) => c,
+            Err(e) => {
+                return AddResponse {
+                    success: false,
+                    status: "error".to_string(),
+                    chunk_id: None,
+                    error: Some(format!("DB connection failed: {}", e)),
+                };
+            }
+        };
+
+        let mut added = 0;
+        let mut duplicates = 0;
+
+        for (text, title) in entries {
+            let content_hash = format!("{:016x}", xxh3_64(text.as_bytes()));
+
+            let exists: bool = conn
+                .query_row(
+                    "SELECT 1 FROM knowledge WHERE content_hash=? LIMIT 1",
+                    [&content_hash],
+                    |r| r.get::<_, i32>(0),
+                )
+                .unwrap_or(0)
+                == 1;
+
+            if exists {
+                duplicates += 1;
+                continue;
+            }
+
+            let embedding = match model.encode(&[text.clone()]).into_iter().next() {
+                Some(e) => e,
+                None => continue,
+            };
+
+            let tx = match conn.transaction() {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+
+            if tx.execute(
+                "INSERT INTO knowledge(content, title, source, content_hash) VALUES(?, ?, ?, ?)",
+                params![text, title, "memory", content_hash],
+            ).is_err() {
+                continue;
+            }
+
+            let chunk_id = tx.last_insert_rowid();
+            if chunk_id > 0 {
+                let vector_str = match serde_json::to_string(&embedding) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                if tx.execute(
+                    "INSERT INTO embeddings(knowledge_id, vector) VALUES(?, ?)",
+                    params![chunk_id, vector_str],
+                ).is_err() {
+                    continue;
+                }
+
+                if tx.commit().is_ok() {
+                    added += 1;
+                }
+            }
+        }
+
+        AddResponse {
+            success: true,
+            status: "completed".to_string(),
+            chunk_id: Some(added as i64),
+            error: if duplicates > 0 {
+                Some(format!("{} duplicates skipped", duplicates))
+            } else {
+                None
+            },
+        }
+    })
+    .await;
+
+    match result {
+        Ok(resp) => Json(serde_json::json!({
+            "success": resp.success,
+            "status": resp.status,
+            "added": resp.chunk_id,
+            "error": resp.error
+        })),
+        Err(e) => Json(serde_json::json!({
+            "success": false,
+            "status": "error",
+            "error": e.to_string()
+        })),
+    }
+}
+
+fn parse_memory_content(text: &str) -> Vec<(String, Option<String>)> {
+    let mut entries = Vec::new();
+    let mut current = String::new();
+    let mut title = None;
+
+    for line in text.lines() {
+        if line.starts_with("## [") || line.starts_with("##[") {
+            if !current.trim().is_empty() {
+                entries.push((current.trim().to_string(), title));
+            }
+            current.clear();
+            title = Some(line.trim_start_matches('#').trim().to_string());
+        } else {
+            current.push_str(line);
+            current.push('\n');
+        }
+    }
+
+    if !current.trim().is_empty() {
+        entries.push((current.trim().to_string(), title));
+    }
+
+    entries
+}
+
+async fn health() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "model": MODEL_ID,
+        "version": "0.6.4"
+    }))
+}
+
+async fn ready(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let pool = s.pool.clone();
+    let ready = task::spawn_blocking(move || {
+        pool.get()
+            .ok()
+            .and_then(|c| c.query_row("SELECT 1", [], |_| Ok(true)).ok())
+            .unwrap_or(false)
+    })
+    .await
+    .unwrap_or(false);
+
+    Json(serde_json::json!({
+        "ready": ready
+    }))
+}
+
+async fn stats(State(s): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let pool = s.pool.clone();
+    let stats = task::spawn_blocking(move || {
+        let conn = pool.get().map_err(|e| anyhow::anyhow!(e))?;
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM knowledge", [], |r| r.get(0))?;
+        let embed_count: i64 = conn.query_row("SELECT COUNT(*) FROM embeddings", [], |r| r.get(0))?;
+        Ok::<_, anyhow::Error>((count, embed_count))
+    })
+    .await
+    .ok()
+    .and_then(|r| r.ok());
+
+    match stats {
+        Some((count, embed_count)) => Json(serde_json::json!({
+            "count": count,
+            "embeddings": embed_count,
+            "model": MODEL_ID,
+            "version": "0.6.4"
+        })),
+        _ => Json(serde_json::json!({
+            "count": 0,
+            "embeddings": 0,
+            "model": MODEL_ID,
+            "version": "0.6.4"
+        })),
+    }
+}
+
+async fn embeddings(
+    State(s): State<Arc<AppState>>,
+    Json(req): Json<EmbeddingsRequest>,
+) -> Json<serde_json::Value> {
+    let input = req.input.trim().to_string();
+    if input.is_empty() {
+        return Json(serde_json::json!({
+            "error": {
+                "message": "input is required",
+                "type": "invalid_request_error"
+            }
+        }));
+    }
+
+    let model = Arc::clone(&s.model);
+    let model_name = req.model;
+
+    let result = task::spawn_blocking(move || model.encode(&[input]).into_iter().next())
+        .await;
+
+    match result {
+        Ok(Some(embedding)) => {
+            let tokens = embedding.len();
+            Json(serde_json::json!({
+                "object": "list",
+                "data": [{
+                    "object": "embedding",
+                    "embedding": embedding,
+                    "index": 0
+                }],
+                "model": model_name,
+                "usage": {
+                    "prompt_tokens": tokens,
+                    "total_tokens": tokens
+                }
+            }))
+        }
+        _ => Json(serde_json::json!({
+            "error": {
+                "message": "Failed to generate embedding",
+                "type": "server_error"
+            }
+        })),
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("🧠 Brain Server v0.6.4");
+
+    let home = dirs::home_dir().context("no home directory")?;
+    let db_path = home.join(".openclaw/workspace/brain.db");
+
+    if let Some(p) = db_path.parent() {
+        std::fs::create_dir_all(p).ok();
+    }
+
+    println!("📦 Database: {:?}", db_path);
+
+    let pool = r2d2::Pool::builder()
+        .max_size(4)
+        .min_idle(Some(1))
+        .build(SqliteConnectionManager::file(&db_path))?;
+
+    run_migration(&mut *pool.get().context("migration failed")?)?;
+
+    println!("🤖 Loading model: {}", MODEL_ID);
+    let model = Arc::new(
+        StaticModel::from_pretrained(MODEL_ID, None, Some(true), None)
+            .map_err(|e| anyhow::anyhow!("Model load failed: {}", e))?,
+    );
+    println!("✅ Model loaded");
+
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/ready", get(ready))
+        .route("/stats", get(stats))
+        .route("/add", post(add_chunk))
+        .route("/ingest/memory", post(ingest_memory))
+        .route("/search", get(search))
+        .route("/v1/embeddings", post(embeddings))
+        .layer(cors)
+        .with_state(Arc::new(AppState { model, pool }));
+
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8765));
+    println!("🚀 Server: http://{}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            let ctrl_c = async {
+                signal::ctrl_c()
+                    .await
+                    .expect("failed to install Ctrl+C handler");
+            };
+
+            #[cfg(unix)]
+            let terminate = async {
+                signal::unix::signal(signal::unix::SignalKind::terminate())
+                    .expect("failed to install signal handler")
+                    .recv()
+                    .await;
+            };
+
+            #[cfg(not(unix))]
+            let terminate = std::future::pending::<()>();
+
+            tokio::select! {
+                _ = ctrl_c => {},
+                _ = terminate => {},
+            }
+            println!("\n🛑 Shutting down...");
+        })
+        .await?;
+
+    Ok(())
+}

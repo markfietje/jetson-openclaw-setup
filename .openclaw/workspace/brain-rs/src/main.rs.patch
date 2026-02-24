@@ -1,0 +1,10 @@
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -15,6 +15,7 @@ use std::{
+     net::SocketAddr,
+     path::PathBuf,
+     sync::Arc,
++    sync::atomic::{AtomicUsize, Ordering},
+     time::Duration as StdDuration,
+ };
+ use sysinfo::System;
