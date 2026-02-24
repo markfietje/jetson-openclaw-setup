@@ -105,9 +105,6 @@ jobs:
         run: |
           echo "🔍 Validating TOML files..."
 
-          # Install cargo-toml-lint
-          cargo install cargo-toml
-
           # Check all Cargo.toml files
           find . -name "Cargo.toml" | while read file; do
             if [ -f "$file" ]; then
