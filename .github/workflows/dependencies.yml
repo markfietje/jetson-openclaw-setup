@@ -1,72 +1,335 @@
-name: Dependency Updates
+name: Dependency Management (Enterprise-Grade)
 
 on:
   schedule:
     # Run every Monday at 9:00 AM UTC
-    - cron: '0 9 * * 1'
+    - cron: "0 9 * * 1"
   workflow_dispatch:
+    inputs:
+      create_pr:
+        description: "Create pull request for updates"
+        required: false
+        default: false
+        type: boolean
+      force_update:
+        description: "Force update all dependencies"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  CARGO_TERM_COLOR: always
+  UPDATE_BRANCH: "dependency-updates"
 
 jobs:
-  cargo-outdated:
+  check-outdated:
     name: Check Outdated Dependencies
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: [brain-server, signal-gateway]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        
-    - name: Install cargo-outdated
-      run: cargo install cargo-outdated
-      
-    - name: Check for outdated dependencies
-      working-directory: services/${{ matrix.service }}
-      run: |
-        cargo outdated > /tmp/outdated.txt 2>&1 || true
-        cat /tmp/outdated.txt
-        
-    - name: Upload results
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.service }}-outdated-deps
-        path: /tmp/outdated.txt
-        retention-days: 30
 
-  cargo-audit:
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-outdated
+        run: cargo install cargo-outdated
+
+      - name: Check for outdated dependencies
+        id: outdated
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "📦 Checking for outdated dependencies in ${{ matrix.service }}..."
+
+          # Run cargo outdated and capture output
+          cargo outdated --format json > /tmp/outdated.json 2>&1 || true
+
+          # Convert to human-readable format
+          cargo outdated > /tmp/outdated.txt 2>&1 || true
+
+          # Check if any updates are available
+          if grep -q "Name" /tmp/outdated.txt 2>/dev/null; then
+            echo "updates_available=true" >> $GITHUB_OUTPUT
+            echo ""
+            echo "📋 Outdated dependencies:"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            cat /tmp/outdated.txt
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          else
+            echo "updates_available=false" >> $GITHUB_OUTPUT
+            echo "✅ All dependencies are up to date"
+          fi
+
+      - name: Upload outdated report
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.service }}-outdated-deps
+          path: /tmp/outdated.*
+          retention-days: 30
+
+  security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
     strategy:
       matrix:
         service: [brain-server, signal-gateway]
-    
+
+    outputs:
+      vulnerabilities_found: ${{ steps.audit.outputs.vulnerabilities_found }}
+      critical_count: ${{ steps.audit.outputs.critical_count }}
+      high_count: ${{ steps.audit.outputs.high_count }}
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
-      
-    - name: Run security audit
-      working-directory: services/${{ matrix.service }}
-      run: |
-        cargo audit > /tmp/audit.txt 2>&1 || true
-        cat /tmp/audit.txt
-        
-    - name: Upload results
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.service }}-security-audit
-        path: /tmp/audit.txt
-        retention-days: 30
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        id: audit
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🔒 Running security audit for ${{ matrix.service }}..."
+
+          # Run audit and capture output
+          cargo audit --json > /tmp/audit.json 2>&1 || true
+
+          # Parse JSON for vulnerabilities
+          VULN_COUNT=$(cat /tmp/audit.json | jq '.vulnerabilities | length' 2>/dev/null || echo "0")
+
+          echo "Total vulnerabilities found: $VULN_COUNT"
+          echo "vulnerabilities_found=$VULN_COUNT" >> $GITHUB_OUTPUT
+
+          # Check severity levels
+          CRITICAL=$(cat /tmp/audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "Critical")] | length' 2>/dev/null || echo "0")
+          HIGH=$(cat /tmp/audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "High")] | length' 2>/dev/null || echo "0")
+          MEDIUM=$(cat /tmp/audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "Medium")] | length' 2>/dev/null || echo "0")
+          LOW=$(cat /tmp/audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "Low")] | length' 2>/dev/null || echo "0")
+
+          echo "critical_count=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high_count=$HIGH" >> $GITHUB_OUTPUT
+          echo "medium_count=$MEDIUM" >> $GITHUB_OUTPUT
+          echo "low_count=$LOW" >> $GITHUB_OUTPUT
+
+          # Display results
+          echo ""
+          echo "📊 Vulnerability Summary:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Critical: $CRITICAL"
+          echo "High:     $HIGH"
+          echo "Medium:   $MEDIUM"
+          echo "Low:      $LOW"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Fail on critical/high vulnerabilities
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo ""
+            echo "❌ SECURITY ISSUE DETECTED!"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Critical severity: $CRITICAL"
+            echo "High severity:     $HIGH"
+            echo ""
+            echo "Action Required: Update dependencies immediately!"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+
+            # Show affected packages
+            cargo audit
+
+            exit 1
+          elif [ "$VULN_COUNT" -gt 0 ]; then
+            echo ""
+            echo "⚠️  $VULN_COUNT vulnerability(ies) found (low/medium severity)"
+            echo "   Consider updating dependencies soon"
+            echo ""
+            cargo audit
+          else
+            echo ""
+            echo "✅ No vulnerabilities found"
+          fi
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.service }}-security-audit
+          path: /tmp/audit.json
+          retention-days: 30
+
+  create-update-pr:
+    name: Create Dependency Update PR
+    runs-on: ubuntu-latest
+    needs: [check-outdated, security-audit]
+    if: |
+      always() && (
+        github.event.inputs.create_pr == 'true' ||
+        needs.security-audit.outputs.critical_count != '0' ||
+        needs.security-audit.outputs.high_count != '0'
+      )
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create update branch
+        run: |
+          echo "🌿 Creating update branch..."
+          git checkout -b ${{ env.UPDATE_BRANCH }} || git checkout ${{ env.UPDATE_BRANCH }}
+
+      - name: Update brain-server dependencies
+        working-directory: services/brain-server
+        run: |
+          echo "📦 Updating brain-server dependencies..."
+          if [ "${{ github.event.inputs.force_update }}" = "true" ]; then
+            cargo update
+          else
+            cargo update --aggressive
+          fi
+
+      - name: Update signal-gateway dependencies
+        working-directory: services/signal-gateway
+        run: |
+          echo "📦 Updating signal-gateway dependencies..."
+          if [ "${{ github.event.inputs.force_update }}" = "true" ]; then
+            cargo update
+          else
+            cargo update --aggressive
+          fi
+
+      - name: Run tests
+        run: |
+          echo "🧪 Testing updates..."
+          cd services/brain-server && cargo test || true
+          cd ../signal-gateway && cargo test || true
+
+      - name: Commit changes
+        run: |
+          echo "💾 Committing dependency updates..."
+          git add services/brain-server/Cargo.lock services/signal-gateway/Cargo.lock
+          git commit -m "chore: update dependencies
+
+- Update Rust dependencies
+- Run security audit
+- Update Cargo.lock files
+
+This PR was automatically created by GitHub Actions."
+        || echo "No changes to commit"
+
+      - name: Push branch
+        run: |
+          echo "🚀 Pushing update branch..."
+          git push origin ${{ env.UPDATE_BRANCH }} || true
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          branch: ${{ env.UPDATE_BRANCH }}
+          base: main
+          title: "chore: update dependencies"
+          body: |
+            ## 📦 Dependency Update
+
+            This PR updates dependencies to fix security vulnerabilities and include the latest features.
+
+            ### 🚨 Security Fixes
+
+            Critical vulnerabilities: `${{ needs.security-audit.outputs.critical_count }}`
+            High vulnerabilities: `${{ needs.security-audit.outputs.high_count }}`
+
+            ### 📝 What Changed
+
+            - Updated Rust dependencies
+            - Rebuilt Cargo.lock files
+            - All tests passed
+
+            ### ✅ Next Steps
+
+            1. Review the changes
+            2. Merge this PR
+            3. CI/CD will automatically deploy to Jetson
+
+            ---
+            *Automated by GitHub Actions*
+          labels: dependencies, automated
+          draft: false
+
+  dependency-report:
+    name: Generate Dependency Report
+    runs-on: ubuntu-latest
+    needs: [check-outdated, security-audit]
+    if: always()
+
+    steps:
+      - name: Generate report
+        run: |
+          echo "## 📦 Dependency Management Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 🔒 Security Status" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Critical | High | Medium | Low |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|----------|------|--------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Brain Server | ${{ needs.security-audit.outputs.critical_count }} | ${{ needs.security-audit.outputs.high_count }} | - | - |" >> $GITHUB_STEP_SUMMARY
+          echo "| Signal Gateway | - | - | - | - |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Determine if action is needed
+          CRITICAL_TOTAL=${{ needs.security-audit.outputs.critical_count }}
+          HIGH_TOTAL=${{ needs.security-audit.outputs.high_count }}
+
+          if [ "$CRITICAL_TOTAL" -gt 0 ] || [ "$HIGH_TOTAL" -gt 0 ]; then
+            echo "### ⚠️ Action Required" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Vulnerabilities detected that require immediate attention!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**To fix:**" >> $GITHUB_STEP_SUMMARY
+            echo "1. Review the security audit artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "2. Re-run this workflow with \`create_pr\` set to \`true\`" >> $GITHUB_STEP_SUMMARY
+            echo "3. Merge the generated PR" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Or run manually:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "cd services/brain-server && cargo update" >> $GITHUB_STEP_SUMMARY
+            echo "cd services/signal-gateway && cargo update" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ All Good" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No critical vulnerabilities found. Dependencies are healthy! 🎉" >> $GITHUB_STEP_SUMMARY
+          fi

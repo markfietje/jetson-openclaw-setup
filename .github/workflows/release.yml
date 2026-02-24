@@ -1,152 +1,562 @@
-name: Create Release
+name: Release to Jetson (Enterprise-Grade)
 
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  JETSON_USER: jetson
+  JETSON_HOST: jetson
+  DEPLOY_TIMEOUT: 300
+
 jobs:
-  build-and-release:
-    name: Build and Release
+  validate-tag:
+    name: Validate Release Tag
     runs-on: ubuntu-latest
-    
+    outputs:
+      version: ${{ steps.parse.outputs.version }}
+      is_valid: ${{ steps.validate.outputs.is_valid }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate tag format
+        id: validate
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "🏷️  Validating tag: $TAG"
+
+          # Check if tag follows semantic versioning
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid tag format: $TAG"
+            echo "Expected format: v1.0.0, v2.1.3-beta, etc."
+            echo "is_valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+          echo "✅ Tag format is valid"
+          echo "is_valid=true" >> $GITHUB_OUTPUT
+
+      - name: Parse version
+        id: parse
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+
+      - name: Check for existing releases
+        run: |
+          VERSION="${{ steps.parse.outputs.version }}"
+
+          if git rev-parse "v$VERSION^{tag}" 2>/dev/null; then
+            echo "⚠️  Warning: Tag v$VERSION already exists"
+            echo "   This appears to be an existing release"
+          else
+            echo "✅ New release: v$VERSION"
+          fi
+
+  pre-release-tests:
+    name: Pre-Release Tests
+    runs-on: ubuntu-latest
+    needs: validate-tag
+    if: needs.validate-tag.outputs.is_valid == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Test brain-server
+        working-directory: services/brain-server
+        run: |
+          echo "🧪 Testing brain-server..."
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+          cargo test --verbose
+
+      - name: Test signal-gateway
+        working-directory: services/signal-gateway
+        run: |
+          echo "🧪 Testing signal-gateway..."
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+          cargo test --verbose
+
+      - name: Verify builds
+        run: |
+          echo "🔨 Verifying release builds..."
+
+          # Build x86_64
+          cd services/brain-server && cargo build --release
+          cd ../signal-gateway && cargo build --release
+
+          # Build ARM64
+          cd services/brain-server && cargo build --release --target aarch64-unknown-linux-gnu
+          cd ../signal-gateway && cargo build --release --target aarch64-unknown-linux-gnu
+
+          echo "✅ All builds successful"
+
+  generate-changelog:
+    name: Generate Changelog
+    runs-on: ubuntu-latest
+    needs: [validate-tag, pre-release-tests]
+    if: always() && needs.pre-release-tests.result == 'success'
+
+    outputs:
+      changelog_path: ${{ steps.generate.outputs.changelog_path }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog
+        id: generate
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "📝 Generating changelog for $TAG..."
+
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "ℹ️  No previous tag found, showing all commits"
+            RANGE=""
+          else
+            echo "ℹ️  Previous tag: $PREV_TAG"
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          # Generate changelog
+          cat > /tmp/changelog.md << 'EOF'
+          ## 🚀 Release Notes
+
+          **Version:** $VERSION
+          **Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          ---
+
+          ### 📦 What's Changed
+
+          EOF
+
+          # Categorize commits
+          echo "### ✨ Features" >> /tmp/changelog.md
+          git log $RANGE --pretty=format:"- %s" | grep -i "^feat:" || echo "No new features" >> /tmp/changelog.md
+
+          echo "" >> /tmp/changelog.md
+          echo "### 🐛 Bug Fixes" >> /tmp/changelog.md
+          git log $RANGE --pretty=format:"- %s" | grep -i "^fix:" || echo "No bug fixes" >> /tmp/changelog.md
+
+          echo "" >> /tmp/changelog.md
+          echo "### 🔧 Maintenance" >> /tmp/changelog.md
+          git log $RANGE --pretty=format:"- %s" | grep -iE "^chore:|^refactor:|^perf:|^test:|^docs:" || echo "No maintenance changes" >> /tmp/changelog.md
+
+          echo "" >> /tmp/changelog.md
+          echo "### 📊 Statistics" >> /tmp/changelog.md
+          echo "- Commits: $(git rev-list $RANGE --count)" >> /tmp/changelog.md
+          echo "- Contributors: $(git shortlog -sn $RANGE | wc -l | tr -d ' ')" >> /tmp/changelog.md
+
+          echo "" >> /tmp/changelog.md
+          echo "---" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "### 📦 Pre-built Binaries (ARM64/Jetson)" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "| Service | Binary |" >> /tmp/changelog.md
+          echo "|---------|--------|" >> /tmp/changelog.md
+          echo "| Brain Server | [brain-server-arm64.tar.gz](https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/brain-server-arm64.tar.gz) |" >> /tmp/changelog.md
+          echo "| Signal Gateway | [signal-gateway-arm64.tar.gz](https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/signal-gateway-arm64.tar.gz) |" >> /tmp/changelog.md
+
+          echo "" >> /tmp/changelog.md
+          echo "---" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "### 🔐 Verification" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "Checksums file: [SHA256SUMS.txt](https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/SHA256SUMS.txt)" >> /tmp/changelog.md
+          echo "" >> /tmp/changelog.md
+          echo "```bash" >> /tmp/changelog.md
+          echo "# Verify checksums" >> /tmp/changelog.md
+          echo "wget https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/SHA256SUMS.txt" >> /tmp/changelog.md
+          echo "sha256sum -c SHA256SUMS.txt" >> /tmp/changelog.md
+          echo "```" >> /tmp/changelog.md
+
+          # Upload changelog
+          echo "changelog_path=/tmp/changelog.md" >> $GITHUB_OUTPUT
+
+          echo "📄 Changelog generated:"
+          cat /tmp/changelog.md
+
+      - name: Upload changelog artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: changelog
+          path: /tmp/changelog.md
+          retention-days: 90
+
+  build-release-artifacts:
+    name: Build Release Artifacts
+    runs-on: ubuntu-latest
+    needs: [validate-tag, generate-changelog]
+    if: always() && needs.generate-changelog.result == 'success'
+
     strategy:
       matrix:
         include:
           - service: brain-server
             target: aarch64-unknown-linux-gnu
             artifact_name: brain-server
+            optimize_flags: "-C target-cpu=native -C opt-level=3 -C lto=fat"
           - service: signal-gateway
             target: aarch64-unknown-linux-gnu
             artifact_name: signal-gateway
-    
+            optimize_flags: ""
+
+    outputs:
+      artifact_name: ${{ matrix.service }}-arm64
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        target: ${{ matrix.target }}
-        
-    - name: Cache cargo
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          services/${{ matrix.service }}/target
-        key: ${{ runner.os }}-${{ matrix.service }}-${{ hashFiles('**/Cargo.lock') }}
-        
-    - name: Build for ARM64 (Jetson)
-      working-directory: services/${{ matrix.service }}
-      run: |
-        if [ "${{ matrix.service }}" = "brain-server" ]; then
-          RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" \
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            services/${{ matrix.service }}/target
+          key: ${{ runner.os }}-${{ matrix.service }}-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build optimized ARM64 binary
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🔨 Building ${{ matrix.service }} for ARM64 with optimizations..."
+          RUSTFLAGS="${{ matrix.optimize_flags }}" \
           cargo build --release --target ${{ matrix.target }} -j 1
-        else
-          cargo build --release --target ${{ matrix.target }}
-        fi
-        
-    - name: Create release package
-      run: |
-        cd services/${{ matrix.service }}/target/${{ matrix.target }}/release
-        tar czf /tmp/${{ matrix.service }}-arm64.tar.gz ${{ matrix.artifact_name }}
-        
-    - name: Generate checksums
-      run: |
-        cd /tmp
-        sha256sum ${{ matrix.service }}-arm64.tar.gz > checksums.txt
-        
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.service }}-arm64-binary
-        path: |
-          /tmp/${{ matrix.service }}-arm64.tar.gz
-          /tmp/checksums.txt
-        retention-days: 90
+
+          echo "✅ Build complete"
+          ls -lh target/${{ matrix.target }}/release/${{ matrix.service }}
+
+      - name: Create release package
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          cd services/${{ matrix.service }}/target/${{ matrix.target }}/release
+
+          # Create tarball
+          tar czf /tmp/${{ matrix.service }}-${VERSION}-arm64.tar.gz ${{ matrix.service }}
+
+          # Calculate checksum
+          cd /tmp
+          sha256sum ${{ matrix.service }}-${VERSION}-arm64.tar.gz > checksums.txt
+
+          echo "📦 Package created:"
+          ls -lh /tmp/${{ matrix.service }}-*.tar.gz
+
+          echo "🔐 Checksum:"
+          cat /tmp/checksums.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.service }}-release
+          path: |
+            /tmp/${{ matrix.service }}-*.tar.gz
+            /tmp/checksums.txt
+          retention-days: 90
 
   create-github-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: build-and-release
-    
+    needs:
+      - validate-tag
+      - generate-changelog
+      - build-release-artifacts
+    if: always() && needs.build-release-artifacts.result == 'success'
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Download all artifacts
-      uses: actions/download-artifact@v3
-      with:
-        path: /tmp/artifacts
-        
-    - name: Prepare release assets
-      run: |
-        mkdir -p /tmp/release-assets
-        find /tmp/artifacts -name "*.tar.gz" -exec cp {} /tmp/release-assets/ \;
-        find /tmp/artifacts -name "checksums.txt" -exec cat {} >> /tmp/release-assets/SHA256SUMS.txt \;
-        
-    - name: Generate release notes
-      id: release_notes
-      run: |
-        TAG=${{ github.ref_name }}
-        
-        cat > /tmp/release_notes.md << 'NOTES'
-        ## 🚀 Release: $TAG
-        
-        ### 📦 Pre-built Binaries (ARM64/Jetson)
-        
-        The following binaries are compiled for ARM64 (Jetson Nano, Raspberry Pi 4+):
-        
-        | Service | Binary | Download |
-        |---------|--------|----------|
-        | Brain Server | brain-server-arm64.tar.gz | [Download](https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/brain-server-arm64.tar.gz) |
-        | Signal Gateway | signal-gateway-arm64.tar.gz | [Download](https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/signal-gateway-arm64.tar.gz) |
-        
-        ### 📋 Installation
-        
-        Shell:
-        wget https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/brain-server-arm64.tar.gz
-        wget https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/signal-gateway-arm64.tar.gz
-        
-        tar xzf brain-server-arm64.tar.gz
-        tar xzf signal-gateway-arm64.tar.gz
-        
-        sudo cp brain-server /usr/local/bin/
-        sudo cp signal-gateway /usr/local/bin/
-        
-        ### ✅ Verify Checksums
-        
-        Shell:
-        wget https://github.com/markfietje/jetson-openclaw-setup/releases/download/$TAG/SHA256SUMS.txt
-        sha256sum -c SHA256SUMS.txt
-        
-        ---
-        
-        ### 📖 What's Changed
-        
-        NOTES
-        
-        # Get commits since last tag
-        git log --pretty=format:"- %s (%h)" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> /tmp/release_notes.md
-        
-        cat /tmp/release_notes.md
-        
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ github.ref_name }}
-        name: Release ${{ github.ref_name }}
-        body_path: /tmp/release_notes.md
-        draft: false
-        prerelease: false
-        files: |
-          /tmp/release-assets/*.tar.gz
-          /tmp/release-assets/*.txt
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: /tmp/artifacts
+
+      - name: Prepare release assets
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "📦 Preparing release assets..."
+          mkdir -p /tmp/release-assets
+
+          # Find all tar.gz files
+          find /tmp/artifacts -name "*.tar.gz" -exec cp {} /tmp/release-assets/ \
+
+          # Combine all checksums
+          cat /tmp/artifacts/*/checksums.txt > /tmp/release-assets/SHA256SUMS.txt
+
+          echo "📋 Release assets:"
+          ls -lh /tmp/release-assets/
+
+      - name: Get changelog
+        run: |
+          cp /tmp/artifacts/changelog/changelog.md /tmp/release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body_path: /tmp/release-notes.md
+          draft: false
+          prerelease: false
+          files: /tmp/release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-to-jetson:
+    name: Deploy Release to Jetson
+    runs-on: ubuntu-latest
+    needs:
+      - validate-tag
+      - build-release-artifacts
+      - create-github-release
+    if: always() && needs.create-github-release.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: /tmp/artifacts
+
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.JETSON_SSH_KNOWN_HOSTS }}
+        run: |
+          echo "🔑 Setting up SSH access..."
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh-keyscan -H $JETSON_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Backup current deployment
+        run: |
+          echo "💾 Backing up current deployment..."
+          BACKUP_DIR="/opt/backups/release-backup-$(date +%Y%m%d-%H%M%S)"
+
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo mkdir -p ${BACKUP_DIR} && \
+             sudo cp /usr/local/bin/brain-server ${BACKUP_DIR}/ 2>/dev/null && \
+             sudo cp /usr/local/bin/signal-gateway ${BACKUP_DIR}/ 2>/dev/null && \
+             echo ${BACKUP_DIR} > /tmp/last-release-backup.path && \
+             echo '✅ Backed up to ${BACKUP_DIR}'"
+
+      - name: Deploy brain-server
+        run: |
+          echo "🚀 Deploying brain-server release..."
+
+          # Find the brain-server tarball
+          TARBALL=$(find /tmp/artifacts -name "brain-server-*-arm64.tar.gz" | head -1)
+
+          if [ -z "$TARBALL" ]; then
+            echo "❌ brain-server artifact not found"
+            exit 1
+          fi
+
+          echo "📦 Found: $TARBALL"
+
+          # Extract and deploy
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "mkdir -p ~/release-deploy && \
+             tar xzf - -C ~/release-deploy" < "$TARBALL"
+
+          # Install binary
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl stop brain-server.service && \
+             sudo mv ~/release-deploy/brain-server /usr/local/bin/brain-server && \
+             sudo chmod +x /usr/local/bin/brain-server && \
+             sudo systemctl start brain-server.service"
+
+          echo "✅ brain-server deployed"
+
+      - name: Deploy signal-gateway
+        run: |
+          echo "🚀 Deploying signal-gateway release..."
+
+          # Find the signal-gateway tarball
+          TARBALL=$(find /tmp/artifacts -name "signal-gateway-*-arm64.tar.gz" | head -1)
+
+          if [ -z "$TARBALL" ]; then
+            echo "❌ signal-gateway artifact not found"
+            exit 1
+          fi
+
+          echo "📦 Found: $TARBALL"
+
+          # Extract and deploy
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "mkdir -p ~/release-deploy && \
+             tar xzf - -C ~/release-deploy" < "$TARBALL"
+
+          # Install binary
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl stop signal-gateway.service && \
+             sudo mv ~/release-deploy/signal-gateway /usr/local/bin/signal-gateway && \
+             sudo chmod +x /usr/local/bin/signal-gateway && \
+             sudo systemctl start signal-gateway.service"
+
+          echo "✅ signal-gateway deployed"
+
+      - name: Verify deployment
+        run: |
+          echo "🏥 Verifying deployment..."
+
+          # Wait for services to start
+          sleep 5
+
+          # Check brain-server
+          echo "🧠 Brain Server:"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "systemctl is-active brain-server.service || exit 1"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s http://localhost:8765/health | jq -c '{status: .status}'"
+
+          # Check signal-gateway
+          echo "📡 Signal Gateway:"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "systemctl is-active signal-gateway.service || exit 1"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s http://localhost:8080/v1/health | jq -c '{status: .status}'"
+
+          echo "✅ Deployment verified"
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "🔄 Rolling back deployment..."
+
+          BACKUP_PATH=$(ssh ${JETSON_USER}@${JETSON_HOST} "cat /tmp/last-release-backup.path 2>/dev/null || echo ''")
+
+          if [ -n "$BACKUP_PATH" ]; then
+            echo "Restoring from $BACKUP_PATH"
+            ssh ${JETSON_USER}@${JETSON_HOST} \
+              "sudo systemctl stop brain-server.service signal-gateway.service && \
+               sudo cp ${BACKUP_PATH}/brain-server /usr/local/bin/brain-server && \
+               sudo cp ${BACKUP_PATH}/signal-gateway /usr/local/bin/signal-gateway && \
+               sudo systemctl start brain-server.service signal-gateway.service"
+            echo "✅ Rollback complete"
+          else
+            echo "⚠️  No backup available for rollback"
+          fi
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519
+          ssh ${JETSON_USER}@${JETSON_HOST} "rm -rf ~/release-deploy"
+
+  release-notification:
+    name: Send Release Notification
+    runs-on: ubuntu-latest
+    needs:
+      - validate-tag
+      - create-github-release
+      - deploy-to-jetson
+    if: always() && needs.create-github-release.result == 'success'
+
+    steps:
+      - name: Generate release summary
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          TAG="v${VERSION}"
+
+          echo "## 🎉 Release Complete: $TAG" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📦 Release Assets" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Asset | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| GitHub Release | ${{ needs.create-github-release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Jetson Deployment | ${{ needs.deploy-to-jetson.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.deploy-to-jetson.result }}" == "success" ]; then
+            echo "### ✅ Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The release has been deployed to Jetson and all services are running!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Release URL:** https://github.com/markfietje/jetson-openclaw-setup/releases/tag/$TAG" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Deployment Issues" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "GitHub release created but Jetson deployment failed." >> $GITHUB_STEP_SUMMARY
+            echo "Please check the deployment logs above." >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 Quick Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [Release Page](https://github.com/markfietje/jetson-openclaw-setup/releases/tag/$TAG)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Release Notes](https://github.com/markfietje/jetson-openclaw-setup/releases/tag/$TAG)" >> $GITHUB_STEP_SUMMARY
+          echo "- [Compare Changes](https://github.com/markfietje/jetson-openclaw-setup/compare/$(git describe --tags --abbrev=0 HEAD^)...$TAG)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Create tag commit message
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          echo "📝 Release commit message:"
+          echo ""
+          echo "Release $VERSION"
+          echo ""
+          echo "🚀 Deployed services:"
+          echo "- Brain Server: v$VERSION"
+          echo "- Signal Gateway: v$VERSION"
+          echo ""
+          echo "✅ All services verified on Jetson"

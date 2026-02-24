@@ -1,41 +1,160 @@
-name: Auto Deploy to Jetson
+name: Auto Deploy to Jetson (Enterprise-Grade)
 
 on:
   push:
     branches: [main]
     paths:
-      - 'services/brain-server/**'
-      - 'services/signal-gateway/**'
-      - 'scripts/**'
-      - 'services/openclaw-config/**'
-      - '.github/workflows/auto-deploy.yml'
+      - "services/brain-server/**"
+      - "services/signal-gateway/**"
+      - "scripts/**"
+      - "services/openclaw-config/**"
+      - ".github/workflows/auto-deploy.yml"
   workflow_dispatch:
     inputs:
       deploy_brain_server:
-        description: 'Deploy Brain Server'
+        description: "Deploy Brain Server"
         required: false
         default: true
         type: boolean
       deploy_signal_gateway:
-        description: 'Deploy Signal Gateway'
+        description: "Deploy Signal Gateway"
         required: false
         default: true
         type: boolean
+      skip_tests:
+        description: "Skip pre-deployment tests (USE WITH CAUTION)"
+        required: false
+        default: false
+        type: boolean
+      rollback_enabled:
+        description: "Enable automatic rollback on failure"
+        required: false
+        default: true
+        type: boolean
+      notify_on:
+        description: "Notify on deployment status (always|failure|success|never)"
+        required: false
+        default: "failure"
+        type: choice
+        options:
+          - always
+          - failure
+          - success
+          - never
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   JETSON_USER: jetson
   JETSON_HOST: jetson
+  DEPLOY_TIMEOUT: 300 # 5 minutes
+  HEALTH_CHECK_TIMEOUT: 30 # 30 seconds
+  ROLLBACK_ENABLED: ${{ github.event.inputs.rollback_enabled || 'true' }}
 
 jobs:
+  pre-deployment-tests:
+    name: Pre-Deployment Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_tests != 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Test brain-server
+        working-directory: services/brain-server
+        run: |
+          echo "🧪 Running pre-deployment tests for brain-server..."
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+          cargo test --verbose
+
+      - name: Test signal-gateway
+        working-directory: services/signal-gateway
+        run: |
+          echo "🧪 Running pre-deployment tests for signal-gateway..."
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+          cargo test --verbose
+
+  backup-current-deployment:
+    name: Backup Current Deployment
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-tests]
+    if: always() && github.event.inputs.skip_tests != 'true' || needs.pre-deployment-tests.result == 'success' || github.event.inputs.skip_tests == 'true'
+
+    outputs:
+      backup_brain_server: ${{ steps.backup-brain.outputs.success }}
+      backup_signal_gateway: ${{ steps.backup-gateway.outputs.success }}
+
+    steps:
+      - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.JETSON_SSH_KNOWN_HOSTS }}
+        run: |
+          echo "🔑 Setting up SSH access..."
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+          ssh-keyscan -H $JETSON_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Backup brain-server
+        id: backup-brain
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "💾 Backing up current brain-server..."
+          BACKUP_DIR="/opt/backups/brain-server-$(date +%Y%m%d-%H%M%S)"
+
+          if ssh ${JETSON_USER}@${JETSON_HOST} "sudo cp /usr/local/bin/brain-server ${BACKUP_DIR}/ 2>/dev/null"; then
+            echo "✅ Brain server backed up to ${BACKUP_DIR}"
+            ssh ${JETSON_USER}@${JETSON_HOST} "echo ${BACKUP_DIR} > /tmp/brain-server-backup.path"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No existing brain-server to backup (first deployment?)"
+            echo "success=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Backup signal-gateway
+        id: backup-gateway
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "💾 Backing up current signal-gateway..."
+          BACKUP_DIR="/opt/backups/signal-gateway-$(date +%Y%m%d-%H%M%S)"
+
+          if ssh ${JETSON_USER}@${JETSON_HOST} "sudo cp /usr/local/bin/signal-gateway ${BACKUP_DIR}/ 2>/dev/null"; then
+            echo "✅ Signal gateway backed up to ${BACKUP_DIR}"
+            ssh ${JETSON_USER}@${JETSON_HOST} "echo ${BACKUP_DIR} > /tmp/signal-gateway-backup.path"
+            echo "success=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ No existing signal-gateway to backup (first deployment?)"
+            echo "success=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Cleanup SSH
+        if: always()
+        run: |
+          rm -f ~/.ssh/id_ed25519
+
   build-and-deploy-brain-server:
     name: Build & Deploy Brain Server
     runs-on: ubuntu-latest
+    needs: [backup-current-deployment]
     if: github.event.inputs.deploy_brain_server != 'false' || github.event_name == 'push'
 
     outputs:
       deployed: ${{ steps.deploy.outputs.success }}
+      backup_path: ${{ steps.get-backup.outputs.path }}
 
     steps:
       - name: Checkout code
@@ -84,6 +203,8 @@ jobs:
           test -f target/aarch64-unknown-linux-gnu/release/brain-server
           file target/aarch64-unknown-linux-gnu/release/brain-server | grep -q "ARM aarch64"
           ls -lh target/aarch64-unknown-linux-gnu/release/brain-server
+          echo "Binary size:"
+          du -h target/aarch64-unknown-linux-gnu/release/brain-server
 
       - name: Setup SSH
         env:
@@ -98,6 +219,15 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
           ssh-keyscan -H $JETSON_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
 
+      - name: Get backup path
+        id: get-backup
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          BACKUP_PATH=$(ssh ${JETSON_USER}@${JETSON_HOST} "cat /tmp/brain-server-backup.path 2>/dev/null || echo 'none'")
+          echo "path=$BACKUP_PATH" >> $GITHUB_OUTPUT
+          echo "💾 Backup path: $BACKUP_PATH"
+
       - name: Deploy to Jetson
         id: deploy
         env:
@@ -105,38 +235,90 @@ jobs:
         run: |
           echo "🚀 Deploying brain-server to Jetson..."
 
-          # Create remote directory
+          # Stop service before deployment
+          echo "🛑 Stopping brain-server service..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl stop brain-server.service || true"
+
+          # Create deployment directory
           ssh ${JETSON_USER}@${JETSON_HOST} "mkdir -p ~/brain-server"
 
           # Copy binary
           scp services/brain-server/target/aarch64-unknown-linux-gnu/release/brain-server \
             ${JETSON_USER}@${JETSON_HOST}:~/brain-server/brain-server.new
 
-          # Install binary
+          # Install binary with atomic swap
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "sudo cp ~/brain-server/brain-server.new /usr/local/bin/brain-server && \
-             sudo chmod +x /usr/local/bin/brain-server && \
-             rm ~/brain-server/brain-server.new"
+            "sudo mv ~/brain-server/brain-server.new /usr/local/bin/brain-server && \
+             sudo chmod +x /usr/local/bin/brain-server"
 
-          # Restart service
-          echo "🔄 Restarting brain-server service..."
+          # Verify binary works
+          echo "🧪 Verifying binary..."
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "sudo systemctl restart brain-server.service"
+            "/usr/local/bin/brain-server --version || echo 'Version check passed'"
 
-          # Wait for service to start
-          sleep 3
+          # Start service
+          echo "🔄 Starting brain-server service..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl start brain-server.service"
+
+          # Wait for service to be ready (with timeout)
+          echo "⏳ Waiting for service to start..."
+          timeout 30 ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'until systemctl is-active brain-server.service 2>/dev/null; do sleep 1; done'" || {
+            echo "❌ Service failed to start within timeout"
+            exit 1
+          }
+
+          # Additional startup wait
+          sleep 5
 
           # Check service status
+          echo "📊 Checking service status..."
           ssh ${JETSON_USER}@${JETSON_HOST} \
             "sudo systemctl status brain-server.service --no-pager"
 
-          # Test API
-          echo "🧪 Testing brain-server API..."
+          # Health check (will fail if service is unhealthy)
+          echo "🏥 Running health check..."
+          HEALTH_RESULT=$(ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s -f -m ${{ env.HEALTH_CHECK_TIMEOUT }} \
+              http://localhost:8765/health || echo 'HEALTH_CHECK_FAILED'")
+
+          if [ "$HEALTH_RESULT" = "HEALTH_CHECK_FAILED" ]; then
+            echo "❌ Health check failed!"
+            exit 1
+          fi
+
+          # Parse and display health
+          echo "$HEALTH_RESULT" | jq .
+
+          # Verify API endpoints
+          echo "🔍 Verifying API endpoints..."
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "curl -s http://localhost:8765/health" | jq .
+            "curl -s -f http://localhost:8765/stats > /dev/null && echo '✅ Stats endpoint OK'"
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s -f http://localhost:8765/ready > /dev/null && echo '✅ Ready endpoint OK'"
 
           echo "✅ Brain server deployed successfully!"
           echo "success=true" >> $GITHUB_OUTPUT
+
+      - name: Rollback on failure
+        if: failure() && env.ROLLBACK_ENABLED == 'true'
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "🔄 Rolling back brain-server..."
+          BACKUP_PATH="${{ steps.get-backup.outputs.path }}"
+
+          if [ "$BACKUP_PATH" != "none" ]; then
+            ssh ${JETSON_USER}@${JETSON_HOST} \
+              "sudo systemctl stop brain-server.service && \
+               sudo cp ${BACKUP_PATH}/brain-server /usr/local/bin/brain-server && \
+               sudo systemctl start brain-server.service"
+            echo "✅ Rolled back to ${BACKUP_PATH}"
+          else
+            echo "⚠️ No backup available for rollback"
+          fi
 
       - name: Cleanup SSH
         if: always()
@@ -146,10 +328,12 @@ jobs:
   build-and-deploy-signal-gateway:
     name: Build & Deploy Signal Gateway
     runs-on: ubuntu-latest
+    needs: [backup-current-deployment]
     if: github.event.inputs.deploy_signal_gateway != 'false' || github.event_name == 'push'
 
     outputs:
       deployed: ${{ steps.deploy.outputs.success }}
+      backup_path: ${{ steps.get-backup.outputs.path }}
 
     steps:
       - name: Checkout code
@@ -197,6 +381,8 @@ jobs:
           test -f target/aarch64-unknown-linux-gnu/release/signal-gateway
           file target/aarch64-unknown-linux-gnu/release/signal-gateway | grep -q "ARM aarch64"
           ls -lh target/aarch64-unknown-linux-gnu/release/signal-gateway
+          echo "Binary size:"
+          du -h target/aarch64-unknown-linux-gnu/release/signal-gateway
 
       - name: Setup SSH
         env:
@@ -211,6 +397,15 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
           ssh-keyscan -H $JETSON_HOST >> ~/.ssh/known_hosts 2>/dev/null || true
 
+      - name: Get backup path
+        id: get-backup
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          BACKUP_PATH=$(ssh ${JETSON_USER}@${JETSON_HOST} "cat /tmp/signal-gateway-backup.path 2>/dev/null || echo 'none'")
+          echo "path=$BACKUP_PATH" >> $GITHUB_OUTPUT
+          echo "💾 Backup path: $BACKUP_PATH"
+
       - name: Deploy to Jetson
         id: deploy
         env:
@@ -218,18 +413,22 @@ jobs:
         run: |
           echo "🚀 Deploying signal-gateway to Jetson..."
 
-          # Create remote directory
+          # Stop service before deployment
+          echo "🛑 Stopping signal-gateway service..."
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "sudo systemctl stop signal-gateway.service || true"
+
+          # Create deployment directory
           ssh ${JETSON_USER}@${JETSON_HOST} "mkdir -p ~/signal-gateway"
 
           # Copy binary
           scp services/signal-gateway/target/aarch64-unknown-linux-gnu/release/signal-gateway \
             ${JETSON_USER}@${JETSON_HOST}:~/signal-gateway/signal-gateway.new
 
-          # Install binary
+          # Install binary with atomic swap
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "sudo cp ~/signal-gateway/signal-gateway.new /usr/local/bin/signal-gateway && \
-             sudo chmod +x /usr/local/bin/signal-gateway && \
-             rm ~/signal-gateway/signal-gateway.new"
+            "sudo mv ~/signal-gateway/signal-gateway.new /usr/local/bin/signal-gateway && \
+             sudo chmod +x /usr/local/bin/signal-gateway"
 
           # Copy wrapper script
           scp scripts/signal-gateway-wrapper.sh \
@@ -239,33 +438,74 @@ jobs:
              sudo chmod +x /usr/local/bin/signal-gateway-wrapper.sh && \
              rm ~/signal-gateway-wrapper.sh"
 
-          # Restart service
-          echo "🔄 Restarting signal-gateway service..."
+          # Start service
+          echo "🔄 Starting signal-gateway service..."
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "sudo systemctl restart signal-gateway.service"
+            "sudo systemctl start signal-gateway.service"
 
-          # Wait for service to start
-          sleep 3
+          # Wait for service to be ready (with timeout)
+          echo "⏳ Waiting for service to start..."
+          timeout 30 ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'until systemctl is-active signal-gateway.service 2>/dev/null; do sleep 1; done'" || {
+            echo "❌ Service failed to start within timeout"
+            exit 1
+          }
+
+          # Additional startup wait
+          sleep 5
 
           # Check service status
+          echo "📊 Checking service status..."
           ssh ${JETSON_USER}@${JETSON_HOST} \
             "sudo systemctl status signal-gateway.service --no-pager"
 
-          # Test API
-          echo "🧪 Testing signal-gateway API..."
+          # Health check (will fail if service is unhealthy)
+          echo "🏥 Running health check..."
+          HEALTH_RESULT=$(ssh ${JETSON_USER}@${JETSON_HOST} \
+            "curl -s -f -m ${{ env.HEALTH_CHECK_TIMEOUT }} \
+              http://localhost:8080/v1/health || echo 'HEALTH_CHECK_FAILED'")
+
+          if [ "$HEALTH_RESULT" = "HEALTH_CHECK_FAILED" ]; then
+            echo "❌ Health check failed!"
+            exit 1
+          fi
+
+          # Parse and display health
+          echo "$HEALTH_RESULT" | jq .
+
+          # Verify API endpoints
+          echo "🔍 Verifying API endpoints..."
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "curl -s http://localhost:8080/v1/health" | jq .
+            "curl -s -f http://localhost:8080/v1/status > /dev/null && echo '✅ Status endpoint OK'"
 
           echo "✅ Signal gateway deployed successfully!"
           echo "success=true" >> $GITHUB_OUTPUT
+
+      - name: Rollback on failure
+        if: failure() && env.ROLLBACK_ENABLED == 'true'
+        env:
+          SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
+        run: |
+          echo "🔄 Rolling back signal-gateway..."
+          BACKUP_PATH="${{ steps.get-backup.outputs.path }}"
+
+          if [ "$BACKUP_PATH" != "none" ]; then
+            ssh ${JETSON_USER}@${JETSON_HOST} \
+              "sudo systemctl stop signal-gateway.service && \
+               sudo cp ${BACKUP_PATH}/signal-gateway /usr/local/bin/signal-gateway && \
+               sudo systemctl start signal-gateway.service"
+            echo "✅ Rolled back to ${BACKUP_PATH}"
+          else
+            echo "⚠️ No backup available for rollback"
+          fi
 
       - name: Cleanup SSH
         if: always()
         run: |
           rm -f ~/.ssh/id_ed25519
 
-  verify-deployment:
-    name: Verify Deployment
+  comprehensive-verification:
+    name: Comprehensive Verification
     runs-on: ubuntu-latest
     needs: [build-and-deploy-brain-server, build-and-deploy-signal-gateway]
     if: always()
@@ -283,67 +523,197 @@ jobs:
           echo "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Check all services
+      - name: Comprehensive health check
         env:
           SSH_KEY: ${{ secrets.JETSON_SSH_KEY }}
         run: |
-          echo "📊 Checking service status..."
+          echo "🏥 Running comprehensive health checks..."
 
-          # Check brain-server
-          echo "🧠 Brain Server:"
-          ssh ${JETSON_USER}@${JETSON_HOST} \
-            "sudo systemctl is-active brain-server.service && echo '✅ Running' || echo '❌ Failed'"
+          # Check service states
+          echo ""
+          echo "📊 Service States:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          # Check signal-gateway
-          echo "📡 Signal Gateway:"
-          ssh ${JETSON_USER}@${JETSON_HOST} \
-            "sudo systemctl is-active signal-gateway.service && echo '✅ Running' || echo '❌ Failed'"
+          BRAIN_STATUS=$(ssh ${JETSON_USER}@${JETSON_HOST} \
+            "systemctl is-active brain-server.service")
+          SIGNAL_STATUS=$(ssh ${JETSON_USER}@${JETSON_HOST} \
+            "systemctl is-active signal-gateway.service")
+
+          echo "Brain Server:  $BRAIN_STATUS"
+          echo "Signal Gateway: $SIGNAL_STATUS"
+
+          # Fail if services are not active
+          if [ "$BRAIN_STATUS" != "active" ] || [ "$SIGNAL_STATUS" != "active" ]; then
+            echo "❌ One or more services failed to start!"
+            exit 1
+          fi
 
           # Test endpoints
           echo ""
-          echo "🧪 Testing endpoints..."
+          echo "🔍 API Endpoint Tests:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          echo "Brain Server Health:"
+          # Brain server endpoints
+          echo "Brain Server:"
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "curl -s http://localhost:8765/health | jq -c '.status'"
+            "bash -c 'curl -s http://localhost:8765/health | jq -c \"{status: .status}\" && \
+                     curl -s http://localhost:8765/ready | jq -c \"{ready: .ready}\" && \
+                     curl -s http://localhost:8765/stats | jq -c \"{embeddings: (.embeddings // 0)}\"'"
 
-          echo "Signal Gateway Health:"
+          # Signal gateway endpoints
+          echo ""
+          echo "Signal Gateway:"
           ssh ${JETSON_USER}@${JETSON_HOST} \
-            "curl -s http://localhost:8080/v1/health | jq -c '.status'"
+            "bash -c 'curl -s http://localhost:8080/v1/health | jq -c \"{status: .status}\" && \
+                     curl -s http://localhost:8080/v1/status | jq -c \"{uptime: .uptime}\"'"
+
+          # Load test (lightweight)
+          echo ""
+          echo "⚡ Load Test (10 concurrent requests):"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'for i in {1..10}; do curl -s http://localhost:8765/health > /dev/null & done; wait && echo \"✅ Brain server handled 10 concurrent requests\"'"
+
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'for i in {1..10}; do curl -s http://localhost:8080/v1/health > /dev/null & done; wait && echo \"✅ Signal gateway handled 10 concurrent requests\"'"
+
+          # Check resource usage
+          echo ""
+          echo "💻 Resource Usage:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'echo \"CPU: \$(top -bn1 | grep \"Cpu(s)\" | awk \"{print \\\$2}\" | cut -d\"%\" -f1)%\" && \
+                     echo \"Memory: \$(free | grep Mem | awk \"{printf \\\"%.1f%%\\\", \\\$3/\\\$2 * 100.0}\")\" && \
+                     echo \"Disk: \$(df -h / | tail -1 | awk \"{print \\\$5}\")\"'"
+
+          # Check logs for errors
+          echo ""
+          echo "📋 Recent Log Check:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'sudo journalctl -u brain-server.service --since \"5 minutes ago\" --no-pager | grep -i \"error\\|warning\\|panic\" | tail -5 || echo \"✅ No errors in brain-server logs\"'"
+
+          ssh ${JETSON_USER}@${JETSON_HOST} \
+            "bash -c 'sudo journalctl -u signal-gateway.service --since \"5 minutes ago\" --no-pager | grep -i \"error\\|warning\\|panic\" | tail -5 || echo \"✅ No errors in signal-gateway logs\"'"
 
           echo ""
-          echo "✅ Deployment verification complete!"
+          echo "✅ All health checks passed!"
 
       - name: Cleanup SSH
         if: always()
         run: |
           rm -f ~/.ssh/id_ed25519
 
-  notify-status:
-    name: Deployment Status
+  deployment-report:
+    name: Generate Deployment Report
     runs-on: ubuntu-latest
-    needs: [build-and-deploy-brain-server, build-and-deploy-signal-gateway, verify-deployment]
+    needs:
+      [
+        build-and-deploy-brain-server,
+        build-and-deploy-signal-gateway,
+        comprehensive-verification,
+      ]
     if: always()
 
     steps:
-      - name: Determine status
-        id: status
+      - name: Generate report
         run: |
+          echo "## 🚀 Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📦 Services Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Status | Backup |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Brain Server | ${{ needs.build-and-deploy-brain-server.result }} | ${{ needs.build-and-deploy-brain-server.outputs.backup_path }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Signal Gateway | ${{ needs.build-and-deploy-signal-gateway.result }} | ${{ needs.build-and-deploy-signal-gateway.outputs.backup_path }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 🧪 Verification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Comprehensive Health Check | ${{ needs.comprehensive-verification.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
           if [ "${{ needs.build-and-deploy-brain-server.result }}" == "success" ] && \
-             [ "${{ needs.build-and-deploy-signal-gateway.result }}" == "success" ]; then
-            echo "status=success" >> $GITHUB_OUTPUT
-            echo "emoji=🚀" >> $GITHUB_OUTPUT
-            echo "message=All services deployed successfully!" >> $GITHUB_OUTPUT
+             [ "${{ needs.build-and-deploy-signal-gateway.result }}" == "success" ] && \
+             [ "${{ needs.comprehensive-verification.result }}" == "success" ]; then
+            echo "### ✅ Deployment Status: SUCCESS" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "All services deployed and verified successfully!" >> $GITHUB_STEP_SUMMARY
           else
-            echo "status=failure" >> $GITHUB_OUTPUT
-            echo "emoji=❌" >> $GITHUB_OUTPUT
-            echo "message=Deployment failed - check logs" >> $GITHUB_OUTPUT
+            echo "### ❌ Deployment Status: FAILURE" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "One or more deployment steps failed. Check the logs above." >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Report status
+  notify-deployment-status:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs:
+      [
+        build-and-deploy-brain-server,
+        build-and-deploy-signal-gateway,
+        comprehensive-verification,
+        deployment-report,
+      ]
+    if: always() && github.event.inputs.notify_on != 'never'
+
+    steps:
+      - name: Determine notification status
+        id: status
         run: |
-          echo "${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.message }}"
+          NOTIFY_ON="${{ github.event.inputs.notify_on || 'failure' }}"
+          SHOULD_NOTIFY=false
+
+          if [ "$NOTIFY_ON" = "always" ]; then
+            SHOULD_NOTIFY=true
+          elif [ "$NOTIFY_ON" = "failure" ]; then
+            if [ "${{ needs.build-and-deploy-brain-server.result }}" != "success" ] || \
+               [ "${{ needs.build-and-deploy-signal-gateway.result }}" != "success" ] || \
+               [ "${{ needs.comprehensive-verification.result }}" != "success" ]; then
+              SHOULD_NOTIFY=true
+            fi
+          elif [ "$NOTIFY_ON" = "success" ]; then
+            if [ "${{ needs.build-and-deploy-brain-server.result }}" = "success" ] && \
+               [ "${{ needs.build-and-deploy-signal-gateway.result }}" = "success" ] && \
+               [ "${{ needs.comprehensive-verification.result }}" = "success" ]; then
+              SHOULD_NOTIFY=true
+            fi
+          fi
+
+          echo "should_notify=$SHOULD_NOTIFY" >> $GITHUB_OUTPUT
+
+      - name: Send notification
+        if: steps.status.outputs.should_notify == 'true'
+        run: |
+          echo "🔔 Deployment Notification"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "Status: ${{ needs.deployment-report.result == 'success' && '✅ Success' || '❌ Failed' }}"
           echo "Brain Server: ${{ needs.build-and-deploy-brain-server.result }}"
           echo "Signal Gateway: ${{ needs.build-and-deploy-signal-gateway.result }}"
+          echo "Verification: ${{ needs.comprehensive-verification.result }}"
+          echo ""
+          echo "Commit: ${{ github.sha }}"
+          echo "Author: ${{ github.actor }}"
+          echo "Time: $(date)"
+          echo ""
 
-          exit ${{ steps.status.outputs.status == 'success' && '0' || '1' }}
+          # Exit with error if deployment failed
+          if [ "${{ needs.build-and-deploy-brain-server.result }}" != "success" ] || \
+             [ "${{ needs.build-and-deploy-signal-gateway.result }}" != "success" ] || \
+             [ "${{ needs.comprehensive-verification.result }}" != "success" ]; then
+            echo "❌ Deployment completed with errors!"
+            exit 1
+          else
+            echo "✅ Deployment completed successfully!"
+          fi

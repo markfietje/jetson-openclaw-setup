@@ -1,88 +1,531 @@
-name: Brain Server CI
+name: Brain Server CI (Enterprise-Grade)
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
     paths:
-      - 'services/brain-server/**'
-      - '.github/workflows/brain-server-ci.yml'
+      - "services/brain-server/**"
+      - ".github/workflows/brain-server-ci.yml"
   pull_request:
-    branches: [ main, dev ]
+    branches: [main, dev]
     paths:
-      - 'services/brain-server/**'
-      - '.github/workflows/brain-server-ci.yml'
+      - "services/brain-server/**"
+      - ".github/workflows/brain-server-ci.yml"
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
 
 jobs:
-  test:
-    name: Test Brain Server
+  format:
+    name: Code Formatting
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        components: rustfmt, clippy
-        
-    - name: Cache cargo registry
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-        
-    - name: Cache cargo index
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-        
-    - name: Cache cargo build
-      uses: actions/cache@v3
-      with:
-        path: services/brain-server/target
-        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
-        
-    - name: Check formatting
-      working-directory: services/brain-server
-      run: cargo fmt -- --check
-      
-    - name: Run clippy
-      working-directory: services/brain-server
-      run: cargo clippy -- -D warnings
-      
-    - name: Run tests
-      working-directory: services/brain-server
-      run: cargo test --verbose
-      
-    - name: Build release
-      working-directory: services/brain-server
-      run: cargo build --release
-      
-    - name: Check binary exists
-      working-directory: services/brain-server
-      run: |
-        test -f target/release/brain-server
-        ./target/release/brain-server --version || echo Version check passed
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: Check formatting
+        working-directory: services/brain-server
+        run: |
+          echo "🎨 Checking code formatting..."
+          cargo fmt -- --check
+          echo "✅ Code is properly formatted"
+
+  lint:
+    name: Linting (Clippy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run clippy
+        working-directory: services/brain-server
+        run: |
+          echo "🔍 Running clippy lints..."
+          cargo clippy --all-targets --all-features -- -D warnings
+          echo "✅ No linting errors found"
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: services/brain-server/target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
+
+      - name: Run tests
+        working-directory: services/brain-server
+        run: |
+          echo "🧪 Running unit tests..."
+          cargo test --verbose -- --test-threads=1
+          echo "✅ All tests passed"
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Generate coverage report
+        working-directory: services/brain-server
+        run: |
+          echo "📊 Generating code coverage report..."
+          cargo tarpaulin --verbose --all-features --workspace --timeout 120 \
+            --out Xml --out Html --output-dir ./coverage
+
+      - name: Display coverage summary
+        working-directory: services/brain-server
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Code Coverage Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Parse cobertura.xml for coverage percentage
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' coverage/cobertura.xml | head -1)
+          PERCENTAGE=$(echo "$COVERAGE * 100" | bc)
+          printf "Coverage: %.2f%%\n" "$PERCENTAGE"
+
+          # Check if coverage meets threshold (80%)
+          if (( $(echo "$PERCENTAGE < 80" | bc -l) )); then
+            echo "⚠️  Warning: Coverage is below 80%"
+            echo "   Please add more tests to improve coverage"
+          else
+            echo "✅ Coverage meets 80% threshold"
+          fi
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./services/brain-server/coverage/cobertura.xml
+          flags: brain-server
+          name: brain-server-coverage
+          fail_ci_if_error: false
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: brain-server-coverage-report
+          path: services/brain-server/coverage/
+          retention-days: 30
+
+      - name: Add coverage to PR comment
+        if: github.event_name == 'pull_request'
+        uses: py-cov-action/python-coverage-comment-action@v3
+        with:
+          GITHUB_TOKEN: ${{ github.GITHUB_TOKEN }}
+          MINIMUM_GREEN: 80
 
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
-    continue-on-error: true
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
-      
-    - name: Run cargo audit
-      working-directory: services/brain-server
-      run: cargo audit
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run security audit
+        id: audit
+        working-directory: services/brain-server
+        run: |
+          echo "🔒 Running security audit..."
+
+          # Run audit and capture output
+          cargo audit --json > audit.json 2>&1 || true
+
+          # Parse JSON for vulnerabilities
+          VULN_COUNT=$(cat audit.json | jq '.vulnerabilities | length' 2>/dev/null || echo "0")
+
+          echo "Total vulnerabilities found: $VULN_COUNT"
+
+          # Check for critical/high severity
+          CRITICAL=$(cat audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "Critical")] | length' 2>/dev/null || echo "0")
+          HIGH=$(cat audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "High")] | length' 2>/dev/null || echo "0")
+
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo ""
+            echo "❌ SECURITY ISSUE DETECTED!"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "Critical severity: $CRITICAL"
+            echo "High severity: $HIGH"
+            echo ""
+            echo "Please update dependencies immediately!"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            # Display affected packages
+            cargo audit
+
+            exit 1
+          elif [ "$VULN_COUNT" -gt 0 ]; then
+            echo ""
+            echo "⚠️  $VULN_COUNT vulnerability(ies) found (low/medium severity)"
+            echo "   Consider updating dependencies"
+            cargo audit
+          else
+            echo "✅ No vulnerabilities found"
+          fi
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v3
+        with:
+          name: brain-server-security-audit
+          path: services/brain-server/audit.json
+          retention-days: 30
+
+  documentation:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build documentation
+        working-directory: services/brain-server
+        run: |
+          echo "📚 Building documentation..."
+          cargo doc --no-deps --all-features
+
+      - name: Check for undocumented public items
+        working-directory: services/brain-server
+        run: |
+          echo "🔍 Checking for undocumented public items..."
+
+          # Capture doc build output
+          cargo doc --no-deps 2>&1 | tee doc-output.txt || true
+
+          # Check for missing documentation warnings
+          UNDOC_COUNT=$(grep -c "missing documentation" doc-output.txt || echo "0")
+
+          if [ "$UNDOC_COUNT" -gt 0 ]; then
+            echo ""
+            echo "⚠️  Found $UNDOC_COUNT undocumented public item(s)"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            grep "missing documentation" doc-output.txt || true
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "Please add documentation comments (///) to these items"
+            exit 1
+          else
+            echo "✅ All public items are documented"
+          fi
+
+      - name: Upload documentation
+        uses: actions/upload-artifact@v3
+        with:
+          name: brain-server-documentation
+          path: services/brain-server/target/doc/
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./services/brain-server/target/doc
+          publish_branch: gh-pages
+          destination_dir: brain-server
+
+  build-x86_64:
+    name: Build (x86_64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: services/brain-server/target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
+
+      - name: Build release binary
+        working-directory: services/brain-server
+        run: |
+          echo "🔨 Building release binary for x86_64..."
+          cargo build --release
+
+      - name: Verify binary
+        working-directory: services/brain-server
+        run: |
+          echo "✅ Verifying binary..."
+          test -f target/release/brain-server
+          ./target/release/brain-server --version || echo "Version check passed"
+          ls -lh target/release/brain-server
+
+  build-arm64:
+    name: Build (ARM64/Jetson)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          target: aarch64-unknown-linux-gnu
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: services/brain-server/target
+          key: ${{ runner.os }}-cargo-build-target-arm64-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
+
+      - name: Build for ARM64
+        working-directory: services/brain-server
+        run: |
+          echo "🔨 Building release binary for ARM64..."
+          RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" \
+          cargo build --release --target aarch64-unknown-linux-gnu -j 1
+
+      - name: Verify ARM64 binary
+        working-directory: services/brain-server
+        run: |
+          echo "✅ Verifying ARM64 binary..."
+          test -f target/aarch64-unknown-linux-gnu/release/brain-server
+          file target/aarch64-unknown-linux-gnu/release/brain-server | grep -q "ARM aarch64"
+          ls -lh target/aarch64-unknown-linux-gnu/release/brain-server
+
+      - name: Upload ARM64 binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: brain-server-arm64
+          path: services/brain-server/target/aarch64-unknown-linux-gnu/release/brain-server
+          retention-days: 7
+
+  performance-benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Criterion
+        run: cargo install cargo-criterion
+
+      - name: Run benchmarks
+        working-directory: services/brain-server
+        run: |
+          echo "⚡ Running performance benchmarks..."
+          cargo criterion --features benchmark
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: brain-server-benchmarks
+          path: services/brain-server/target/criterion/
+          retention-days: 30
+
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs:
+      [
+        format,
+        lint,
+        test,
+        coverage,
+        security-audit,
+        documentation,
+        build-x86_64,
+        build-arm64,
+      ]
+    if: always()
+
+    steps:
+      - name: Generate CI summary
+        run: |
+          echo "## 🧪 Brain Server CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📊 Job Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Formatting | ${{ needs.format.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Linting | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Unit Tests | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Code Coverage | ${{ needs.coverage.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Audit | ${{ needs.security-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Documentation | ${{ needs.documentation.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build (x86_64) | ${{ needs.build-x86_64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build (ARM64) | ${{ needs.build-arm64.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Determine overall status
+          if [ "${{ needs.format.result }}" == "success" ] && \
+             [ "${{ needs.lint.result }}" == "success" ] && \
+             [ "${{ needs.test.result }}" == "success" ] && \
+             [ "${{ needs.coverage.result }}" == "success" ] && \
+             [ "${{ needs.security-audit.result }}" == "success" ] && \
+             [ "${{ needs.documentation.result }}" == "success" ] && \
+             [ "${{ needs.build-x86_64.result }}" == "success" ] && \
+             [ "${{ needs.build-arm64.result }}" == "success" ]; then
+            echo "### ✅ All CI Checks Passed!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Brain server is ready for deployment! 🚀" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ❌ CI Failed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "One or more checks failed. Please review the logs above." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi

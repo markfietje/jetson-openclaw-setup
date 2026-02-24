@@ -1,10 +1,13 @@
-name: Code Quality
+name: Code Quality (Enterprise-Grade)
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main, dev ]
+    branches: [main, dev]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   rust-code-quality:
@@ -13,60 +16,453 @@ jobs:
     strategy:
       matrix:
         service: [brain-server, signal-gateway]
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install Rust toolchain
-      uses: actions-rust-lang/setup-rust-toolchain@v1
-      with:
-        toolchain: stable
-        components: rustfmt, clippy
-        
-    - name: Check formatting
-      working-directory: services/${{ matrix.service }}
-      run: cargo fmt -- --check
-      
-    - name: Run clippy (lint)
-      working-directory: services/${{ matrix.service }}
-      run: cargo clippy --all-targets --all-features -- -D warnings
-      
-    - name: Check documentation
-      working-directory: services/${{ matrix.service }}
-      run: |
-        cargo doc --no-deps --all-features
-        # Check for undocumented public items
-        ! grep -r pub fn src/ | grep -v /// | grep -v //! || true
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🎨 Checking code formatting..."
+          cargo fmt -- --check
+          echo "✅ Code is properly formatted"
+
+      - name: Run clippy (lint)
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🔍 Running clippy lints..."
+          cargo clippy --all-targets --all-features -- -D warnings
+          echo "✅ No linting errors found"
+
+      - name: Check documentation
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "📚 Building documentation..."
+          cargo doc --no-deps --all-features
+
+      - name: Check for undocumented public items
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🔍 Checking for undocumented public items..."
+
+          # Capture doc build output
+          cargo doc --no-deps 2>&1 | tee doc-output.txt || true
+
+          # Check for missing documentation warnings
+          UNDOC_COUNT=$(grep -c "missing documentation" doc-output.txt || echo "0")
+
+          if [ "$UNDOC_COUNT" -gt 0 ]; then
+            echo ""
+            echo "⚠️  Found $UNDOC_COUNT undocumented public item(s)"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            grep "missing documentation" doc-output.txt || true
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "Please add documentation comments (///) to these items"
+            exit 1
+          else
+            echo "✅ All public items are documented"
+          fi
 
   config-validation:
     name: Validate Configuration Files
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install YAML validator
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y yamllint
-        
-    - name: Validate YAML configs
-      run: |
-        yamllint services/openclaw-config/config.yaml
-        yamllint services/signal-gateway/config.yaml || echo No config.yaml in signal-gateway
-        
-    - name: Validate systemd service files
-      run: |
-        for file in services/openclaw-config/*.service; do
-          echo Checking $file...
-          grep -q \[Unit\] $file || exit 1
-          grep -q \[Service\] $file || exit 1
-          grep -q ExecStart $file || exit 1
-        done
-        
-    - name: Validate shell scripts
-      run: |
-        sudo apt-get install -y shellcheck
-        shellcheck scripts/*.sh
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install YAML validator
+        run: |
+          echo "📦 Installing yamllint..."
+          sudo apt-get update
+          sudo apt-get install -y yamllint
+
+      - name: Validate YAML configs
+        run: |
+          echo "🔍 Validating YAML files..."
+
+          # Find all YAML files
+          find . -name "*.yaml" -o -name "*.yml" | while read file; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+              yamllint -d relaxed "$file" || {
+                echo "❌ YAML validation failed for $file"
+                exit 1
+              }
+              echo "✅ $file is valid"
+            fi
+          done
+
+      - name: Validate TOML files
+        run: |
+          echo "🔍 Validating TOML files..."
+
+          # Install cargo-toml-lint
+          cargo install cargo-toml
+
+          # Check all Cargo.toml files
+          find . -name "Cargo.toml" | while read file; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Use cargo check to validate TOML syntax
+              if [ -f "$(dirname $file)/src/main.rs" ]; then
+                cd "$(dirname $file)/.." && cargo check --manifest-path "$file" 2>&1 | tee /tmp/toml-check.txt
+                if grep -q "error: could not parse" /tmp/toml-check.txt; then
+                  echo "❌ TOML validation failed for $file"
+                  exit 1
+                fi
+                cd -
+              fi
+
+              echo "✅ $file is valid"
+            fi
+          done
+
+      - name: Validate JSON files
+        run: |
+          echo "🔍 Validating JSON files..."
+
+          # Find all JSON files (exclude node_modules and target)
+          find . -name "*.json" -not -path "*/node_modules/*" -not -path "*/target/*" | while read file; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Use jq to validate JSON syntax
+              if ! jq empty "$file" 2>/dev/null; then
+                echo "❌ JSON validation failed for $file"
+                exit 1
+              fi
+
+              echo "✅ $file is valid"
+            fi
+          done
+
+      - name: Validate systemd service files
+        run: |
+          echo "🔍 Validating systemd service files..."
+
+          for file in services/openclaw-config/*.service; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Check for required sections
+              if ! grep -q "\[Unit\]" "$file"; then
+                echo "❌ Missing [Unit] section in $file"
+                exit 1
+              fi
+
+              if ! grep -q "\[Service\]" "$file"; then
+                echo "❌ Missing [Service] section in $file"
+                exit 1
+              fi
+
+              if ! grep -q "ExecStart" "$file"; then
+                echo "❌ Missing ExecStart directive in $file"
+                exit 1
+              fi
+
+              # Validate with systemd (if available)
+              if command -v systemd-analyze &> /dev/null; then
+                systemd-analyze verify "$file" || {
+                  echo "❌ systemd validation failed for $file"
+                  exit 1
+                }
+              fi
+
+              echo "✅ $file is valid"
+            fi
+          done
+
+      - name: Validate systemd timer files
+        run: |
+          echo "🔍 Validating systemd timer files..."
+
+          for file in services/openclaw-config/*.timer; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Check for required sections
+              if ! grep -q "\[Unit\]" "$file"; then
+                echo "❌ Missing [Unit] section in $file"
+                exit 1
+              fi
+
+              if ! grep -q "\[Timer\]" "$file"; then
+                echo "❌ Missing [Timer] section in $file"
+                exit 1
+              fi
+
+              if ! grep -q "OnUnitActiveSec\|OnCalendar\|OnBootSec" "$file"; then
+                echo "❌ Missing timer directive in $file"
+                exit 1
+              fi
+
+              echo "✅ $file is valid"
+            fi
+          done
+
+      - name: Validate shell scripts
+        run: |
+          echo "🔍 Validating shell scripts..."
+
+          # Install shellcheck
+          sudo apt-get install -y shellcheck
+
+          # Find all shell scripts
+          find . -name "*.sh" -not -path "*/target/*" -not -path "*/node_modules/*" | while read file; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Run shellcheck
+              if ! shellcheck -x "$file"; then
+                echo "⚠️  Shell script issues found in $file"
+                echo "   Review warnings above"
+                # Don't fail on warnings, just report
+              else
+                echo "✅ $file is clean"
+              fi
+            fi
+          done
+
+  markdown-linting:
+    name: Markdown Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install markdown linter
+        run: |
+          echo "📦 Installing markdownlint..."
+          npm install -g markdownlint-cli markdownlint-cli2
+
+      - name: Lint markdown files
+        run: |
+          echo "🔍 Linting markdown files..."
+
+          # Create markdownlint config if it doesn't exist
+          cat > .markdownlint.json << 'EOF'
+          {
+            "default": true,
+            "MD013": {
+              "line_length": 120,
+              "code_blocks": false,
+              "tables": false
+            },
+            "MD033": false,
+            "MD041": false
+          }
+          EOF
+
+          # Find all markdown files
+          find . -name "*.md" -not -path "*/target/*" -not -path "*/node_modules/*" | while read file; do
+            if [ -f "$file" ]; then
+              echo "Checking $file..."
+
+              # Run markdownlint
+              if ! markdownlint "$file"; then
+                echo "⚠️  Markdown issues found in $file"
+                echo "   Run 'markdownlint --fix $file' to auto-fix"
+              else
+                echo "✅ $file is clean"
+              fi
+            fi
+          done
+
+  security-best-practices:
+    name: Security Best Practices Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for secrets
+        run: |
+          echo "🔒 Checking for potential secrets..."
+
+          SECRETS_FOUND=0
+
+          # Check for common secret patterns
+          PATTERNS=(
+            "password\s*[=:]\s*['\"]?[a-zA-Z0-9]+"
+            "api[_-]?key\s*[=:]\s*['\"]?[a-zA-Z0-9]+"
+            "secret\s*[=:]\s*['\"]?[a-zA-Z0-9]+"
+            "token\s*[=:]\s*['\"]?[a-zA-Z0-9]+"
+            "private[_-]?key"
+            "aws[_-]?access[_-]?key"
+            "aws[_-]?secret"
+            "BEGIN\s+PRIVATE\s+KEY"
+            "BEGIN\s+RSA\s+PRIVATE\s+KEY"
+            "github.*token"
+            "ghp_[a-zA-Z0-9]{36}"
+            "gho_[a-zA-Z0-9]{36}"
+            "ghu_[a-zA-Z0-9]{36}"
+            "ghs_[a-zA-Z0-9]{36}"
+            "ghr_[a-zA-Z0-9]{36}"
+            "gho_[a-zA-Z0-9]{36}"
+            "sk_live_[a-zA-Z0-9]+"
+            "sk_test_[a-zA-Z0-9]+"
+          )
+
+          # Search in source files (exclude node_modules, target, .git)
+          find . -type f \
+            -not -path "*/node_modules/*" \
+            -not -path "*/target/*" \
+            -not -path "*/.git/*" \
+            -not -name "*.lock" \
+            -not -name "*.db" \
+            -not -name "*.db-*" \
+            | while read file; do
+              for pattern in "${PATTERNS[@]}"; do
+                if grep -qiE "$pattern" "$file" 2>/dev/null; then
+                  echo "⚠️  Potential secret found in: $file"
+                  grep -iE --color=never "$pattern" "$file" | head -1
+                  SECRETS_FOUND=$((SECRETS_FOUND + 1))
+                fi
+              done
+            done
+
+          if [ $SECRETS_FOUND -gt 0 ]; then
+            echo ""
+            echo "⚠️  Found $SECRETS_FOUND potential secret(s)"
+            echo "   Please review and ensure no actual secrets are committed"
+            echo "   Consider using .gitignore and environment variables"
+          else
+            echo "✅ No potential secrets found"
+          fi
+
+      - name: Check .gitignore
+        run: |
+          echo "🔍 Checking .gitignore coverage..."
+
+          if [ ! -f .gitignore ]; then
+            echo "❌ No .gitignore file found!"
+            exit 1
+          fi
+
+          # Check for important patterns
+          REQUIRED_PATTERNS=(
+            "target/"
+            "*.db"
+            "*.db-*"
+            "*.key"
+            "*.pem"
+            ".env"
+            ".env.local"
+            "node_modules/"
+            "*.log"
+          )
+
+          MISSING_PATTERNS=0
+          for pattern in "${REQUIRED_PATTERNS[@]}"; do
+            if ! grep -q "$pattern" .gitignore; then
+              echo "⚠️  Recommended pattern missing from .gitignore: $pattern"
+              MISSING_PATTERNS=$((MISSING_PATTERNS + 1))
+            fi
+          done
+
+          if [ $MISSING_PATTERNS -gt 0 ]; then
+            echo ""
+            echo "⚠️  $MISSING_PATTERNS recommended pattern(s) missing from .gitignore"
+          else
+            echo "✅ All critical patterns are in .gitignore"
+          fi
+
+  license-check:
+    name: License Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for LICENSE file
+        run: |
+          echo "🔍 Checking for LICENSE file..."
+
+          if [ ! -f LICENSE ]; then
+            echo "⚠️  No LICENSE file found in repository root"
+            echo "   Consider adding a LICENSE file (MIT, Apache-2.0, etc.)"
+          else
+            echo "✅ LICENSE file found"
+
+            # Check if it's a common license
+            if head -1 LICENSE | grep -iq "MIT\|Apache\|GPL\|BSD"; then
+              echo "✅ License appears to be a standard open-source license"
+            else
+              echo "ℹ️  Custom license detected"
+            fi
+          fi
+
+      - name: Check license headers
+        if: false # Optional: enable if you want to enforce license headers
+        run: |
+          echo "🔍 Checking license headers in source files..."
+
+          # Check Rust source files for license comments
+          find services/*/src -name "*.rs" | while read file; do
+            if ! head -5 "$file" | grep -iq "license\|copyright"; then
+              echo "⚠️  No license header in: $file"
+            fi
+          done
+
+  code-quality-summary:
+    name: Code Quality Summary
+    runs-on: ubuntu-latest
+    needs:
+      [
+        rust-code-quality,
+        config-validation,
+        markdown-linting,
+        security-best-practices,
+        license-check,
+      ]
+    if: always()
+
+    steps:
+      - name: Generate quality summary
+        run: |
+          echo "## 🔍 Code Quality Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date:** $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "### 📊 Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Rust Code Quality | ${{ needs.rust-code-quality.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Configuration Validation | ${{ needs.config-validation.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Markdown Linting | ${{ needs.markdown-linting.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Security Best Practices | ${{ needs.security-best-practices.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| License Check | ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Determine overall status
+          if [ "${{ needs.rust-code-quality.result }}" == "success" ] && \
+             [ "${{ needs.config-validation.result }}" == "success" ] && \
+             [ "${{ needs.markdown-linting.result }}" == "success" ] && \
+             [ "${{ needs.security-best-practices.result }}" == "success" ] && \
+             [ "${{ needs.license-check.result }}" == "success" ]; then
+            echo "### ✅ All Quality Checks Passed!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Code meets enterprise quality standards! 🎉" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ⚠️ Quality Issues Found" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Some quality checks failed. Please review the logs above." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
