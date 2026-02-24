@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use axum::{
     body::{to_bytes, Body},
     extract::{Query, State, Path},
+    http::{header::HeaderName, Method},
     response::Json,
     routing::{get, post},
     Router,
@@ -1060,6 +1061,63 @@ fn contains_suspicious_pattern(input: &str) -> bool {
     suspicious.iter().any(|p| lower.contains(p))
 }
 
+fn build_cors_layer() -> CorsLayer {
+    let cors_origins = std::env::var("CORS_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:3000,http://localhost:8080".to_string());
+
+    let methods: Vec<Method> = std::env::var("CORS_METHODS")
+        .unwrap_or_else(|_| "GET,POST,PUT,DELETE,OPTIONS".to_string())
+        .split(',')
+        .filter_map(|m| m.trim().parse().ok())
+        .collect();
+
+    let headers: Vec<HeaderName> = std::env::var("CORS_HEADERS")
+        .unwrap_or_else(|_| "content-type,authorization".to_string())
+        .split(',')
+        .filter_map(|h| h.trim().parse().ok())
+        .collect();
+
+    let mut cors = CorsLayer::new();
+
+    if cors_origins.trim() == "*" {
+        cors = cors.allow_origin(Any);
+    } else {
+        let origins: Vec<axum::http::HeaderValue> = cors_origins
+            .split(',')
+            .filter_map(|origin| {
+                let trimmed = origin.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    trimmed.parse().ok()
+                }
+            })
+            .collect();
+        
+        if origins.is_empty() {
+            cors = cors.allow_origin(Any);
+        } else {
+            cors = cors.allow_origin(origins);
+        }
+    }
+
+    if methods.is_empty() {
+        cors = cors.allow_methods(Any);
+    } else {
+        cors = cors.allow_methods(methods);
+    }
+
+    if headers.is_empty() {
+        cors = cors.allow_headers(Any);
+    } else {
+        cors = cors.allow_headers(headers);
+    }
+
+    cors
+        .allow_credentials(false)
+        .max_age(std::time::Duration::from_secs(3600))
+}
+
 async fn ingest_markdown(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<MarkdownPayload>,
@@ -1402,10 +1460,7 @@ async fn main() -> Result<()> {
     });
     println!("🧠 Annotator initialized ({} domains)", annotator.domain_count());
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = build_cors_layer();
 
     let app = Router::new()
         .route("/health", get(health))

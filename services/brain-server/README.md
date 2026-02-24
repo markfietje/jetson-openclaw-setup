@@ -305,6 +305,21 @@ WantedBy=default.target
 | `BIND_PORT` | `8765` | Port to listen on |
 | `ANNOTATOR_ENABLED` | `false` | Enable domain annotation extraction |
 
+### CORS Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CORS_ORIGINS` | `http://localhost:3000,http://localhost:8080` | Allowed origins (comma-separated, use `*` for any) |
+| `CORS_METHODS` | `GET,POST,PUT,DELETE,OPTIONS` | Allowed HTTP methods (comma-separated) |
+| `CORS_HEADERS` | `content-type,authorization` | Allowed request headers (comma-separated) |
+
+**Security Note:** For production, always explicitly set `CORS_ORIGINS` to your specific domains rather than using `*`.
+
+```bash
+# Production example
+CORS_ORIGINS=https://example.com,https://app.example.com ./target/release/brain-server
+```
+
 ---
 
 ## Database Schema
