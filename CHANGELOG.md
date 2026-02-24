@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.1] - 2026-02-24
+
+### Signal Gateway
+
+#### Security
+- Updated `reqwest` to 0.13.1 (security fix)
+- Added input validation for recipients (UUID, phone E.164, ACI formats)
+- Added input validation for messages (length, content)
+- Added rate limiting infrastructure
+- Added recipient caching infrastructure
+
+#### Compatibility
+- Fixed OpenClaw camelCase field mapping (`sourceNumber`, `sourceUuid`, `sourceDevice`, `dataMessage`, `groupInfo`, `contentType`, `groupId`, `groupName`)
+
+#### Code Quality
+- Zero clippy warnings (`cargo clippy -- -D warnings`)
+- Added comprehensive unit tests (13 tests passing)
+
+---
+
 ## [0.8.1] - 2026-02-24
 
 ### Security

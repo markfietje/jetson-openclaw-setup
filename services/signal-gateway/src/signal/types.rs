@@ -12,11 +12,17 @@ pub struct SignalMessage {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignalEnvelope {
+    #[serde(rename = "sourceNumber", skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    #[serde(rename = "sourceUuid", skip_serializing_if = "Option::is_none")]
     pub source_uuid: Option<String>,
+    #[serde(rename = "sourceDevice", skip_serializing_if = "Option::is_none")]
     pub source_device: Option<i32>,
     pub timestamp: Option<i64>,
+    #[serde(rename = "dataMessage", skip_serializing_if = "Option::is_none")]
     pub data_message: Option<SignalDataMessage>,
+    #[serde(rename = "syncMessage", skip_serializing_if = "Option::is_none")]
+    pub sync_message: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -24,6 +30,7 @@ pub struct SignalDataMessage {
     pub message: Option<String>,
     pub timestamp: Option<i64>,
     pub attachments: Option<Vec<SignalAttachment>>,
+    #[serde(rename = "groupInfo", skip_serializing_if = "Option::is_none")]
     pub group_info: Option<SignalGroupInfo>,
     pub quote: Option<SignalQuote>,
     pub mentions: Option<Vec<SignalMention>>,
@@ -31,6 +38,7 @@ pub struct SignalDataMessage {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignalAttachment {
+    #[serde(rename = "contentType", skip_serializing_if = "Option::is_none")]
     pub content_type: Option<String>,
     pub filename: Option<String>,
     pub size: Option<u64>,
@@ -40,7 +48,9 @@ pub struct SignalAttachment {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignalGroupInfo {
+    #[serde(rename = "groupId", skip_serializing_if = "Option::is_none")]
     pub group_id: Option<String>,
+    #[serde(rename = "groupName", skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub revision: Option<i32>,
 }

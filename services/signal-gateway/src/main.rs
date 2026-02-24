@@ -10,6 +10,11 @@
 //! 7. Input validation
 //! 8. Timeout on oneshot receivers
 //! 9. Dynamic phone number (no hardcoding)
+//!
+//! Security enhancements:
+//! - Input validation (validation.rs)
+//! - Rate limiting (ratelimit.rs)
+//! - Recipient caching (cache.rs)
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -18,9 +23,12 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 mod api;
+mod cache;
 mod config;
+mod ratelimit;
 mod signal;
 mod state;
+mod validation;
 mod webhook;
 
 use config::Config;

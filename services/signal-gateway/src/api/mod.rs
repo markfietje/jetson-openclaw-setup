@@ -11,6 +11,7 @@
 //! - GET  /api/v1/events - SSE stream for messages
 
 use crate::state::AppState;
+use crate::validation::{validate_message, validate_phone, validate_recipient};
 use axum::{
     extract::{Path, State as AxumState},
     response::{
@@ -162,60 +163,52 @@ async fn seed_cache(
     AxumState(state): AxumState<AppState>,
     Json(body): Json<CacheSeedRequest>,
 ) -> impl IntoResponse {
-    let cache = state.signal.get_recipient_cache();
+    // Validate phone number
+    let phone = match validate_phone(&body.phone) {
+        Ok(p) => p,
+        Err(e) => return (axum::http::StatusCode::BAD_REQUEST, Json(json!({ "error": e }))),
+    };
 
-    // Validate inputs
-    if body.phone.is_empty() || body.uuid.is_empty() {
-        return Json(json!({
-            "error": "Both phone and uuid are required"
-        }));
-    }
+    // Validate UUID
+    let uuid = match validate_recipient(&body.uuid) {
+        Ok(u) => u,
+        Err(e) => return (axum::http::StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Invalid UUID: {}", e) }))),
+    };
 
     // Insert into cache
-    cache.insert(body.phone.clone(), body.uuid.clone());
+    let cache = state.signal.get_recipient_cache();
+    cache.insert(phone.clone(), uuid.clone());
+    tracing::info!("Cached: {} -> {}", phone, uuid);
 
-    tracing::info!("Cached: {} -> {}", body.phone, body.uuid);
-
-    Json(json!({
-        "status": "ok",
-        "phone": body.phone,
-        "uuid": body.uuid,
-        "message": "Cached successfully"
-    }))
+    (axum::http::StatusCode::OK, Json(json!({ "status": "ok", "phone": phone, "uuid": uuid, "message": "Cached successfully" })))
 }
 
 /// Send message - v2 API (OpenClaw uses this)
 /// IMPORTANT: Recipient should be UUID (ACI) format, NOT phone number!
-/// Signal uses UUIDs internally. Phone numbers must be resolved to UUIDs first.
 async fn send_message_v2(
     AxumState(state): AxumState<AppState>,
     Json(body): Json<SendMessageRequest>,
 ) -> impl IntoResponse {
-    // Get the first recipient
-    let recipient = body.recipients.first().map(|r| r.as_str()).unwrap_or("");
-
-    // Handle UUID format (u:uuid) or direct UUID
-    let recipient = if let Some(stripped) = recipient.strip_prefix("u:") {
-        stripped
-    } else {
-        recipient
+    // Validate recipient
+    let recipient_opt = body.recipients.first().and_then(|r| validate_recipient(r).ok());
+    let recipient = match recipient_opt {
+        Some(r) => r,
+        None => return (axum::http::StatusCode::BAD_REQUEST, Json(json!({ "error": "Invalid recipient format" }))),
     };
 
-    // Log the attempt
+    // Validate message
+    let message = match validate_message(&body.message) {
+        Ok(m) => m,
+        Err(e) => return (axum::http::StatusCode::BAD_REQUEST, Json(json!({ "error": e }))),
+    };
+
     tracing::info!("Sending message to: {}", recipient);
 
-    match state.signal.send_message(recipient, &body.message).await {
-        Ok(_id) => Json(json!({
-            "timestamp": chrono::Utc::now().timestamp_millis(),
-            "recipient": recipient,
-            "message": "Sent successfully"
-        })),
+    match state.signal.send_message(&recipient, &message).await {
+        Ok(_id) => (axum::http::StatusCode::OK, Json(json!({ "timestamp": chrono::Utc::now().timestamp_millis(), "recipient": recipient, "message": "Sent successfully" }))),
         Err(e) => {
             tracing::error!("Send failed: {}", e);
-            Json(json!({
-                "error": e.to_string(),
-                "hint": "Recipient must be a UUID (ACI), not a phone number. Use the UUID from incoming messages."
-            }))
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e.to_string() })))
         }
     }
 }

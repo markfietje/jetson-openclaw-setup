@@ -902,6 +902,7 @@ impl SignalWorker {
                     quote,
                     mentions: None,
                 }),
+                sync_message: None,
             },
         })
     }
