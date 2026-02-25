@@ -12,7 +12,7 @@ env:
 jobs:
   rust-code-quality:
     name: Rust Code Quality
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     strategy:
       matrix:
         service: [brain-server, signal-gateway]
@@ -73,7 +73,7 @@ jobs:
 
   config-validation:
     name: Validate Configuration Files
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -224,7 +224,7 @@ jobs:
 
   markdown-linting:
     name: Markdown Linting
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -270,7 +270,7 @@ jobs:
 
   security-best-practices:
     name: Security Best Practices Check
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -370,7 +370,7 @@ jobs:
 
   license-check:
     name: License Check
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -408,7 +408,7 @@ jobs:
 
   code-quality-summary:
     name: Code Quality Summary
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     needs:
       [
         rust-code-quality,

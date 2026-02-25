@@ -24,7 +24,7 @@ env:
 jobs:
   check-outdated:
     name: Check Outdated Dependencies
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     strategy:
       matrix:
         service: [brain-server, signal-gateway]
@@ -81,7 +81,7 @@ jobs:
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     strategy:
       matrix:
         service: [brain-server, signal-gateway]
@@ -181,7 +181,7 @@ jobs:
 
   create-update-pr:
     name: Create Dependency Update PR
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     needs: [check-outdated, security-audit]
     if: |
       always() && (
@@ -281,7 +281,7 @@ jobs:
 
   dependency-report:
     name: Generate Dependency Report
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     needs: [check-outdated, security-audit]
     if: always()
 

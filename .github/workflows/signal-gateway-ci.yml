@@ -20,7 +20,7 @@ env:
 jobs:
   format:
     name: Code Formatting
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -41,7 +41,7 @@ jobs:
 
   lint:
     name: Linting (Clippy)
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -74,7 +74,7 @@ jobs:
 
   test:
     name: Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -112,7 +112,7 @@ jobs:
 
   coverage:
     name: Code Coverage
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -192,7 +192,7 @@ jobs:
 
   security-audit:
     name: Security Audit
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -262,7 +262,7 @@ jobs:
 
   documentation:
     name: Documentation Check
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -333,7 +333,7 @@ jobs:
 
   build-x86_64:
     name: Build (x86_64)
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -377,7 +377,7 @@ jobs:
 
   build-arm64:
     name: Build (ARM64/Jetson)
-    runs-on: ubuntu-latest
+    runs-on: apple-container
 
     steps:
       - name: Checkout code
@@ -435,7 +435,7 @@ jobs:
 
   performance-benchmarks:
     name: Performance Benchmarks
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
@@ -471,7 +471,7 @@ jobs:
 
   ci-summary:
     name: CI Summary
-    runs-on: ubuntu-latest
+    runs-on: apple-container
     needs:
       [
         format,
