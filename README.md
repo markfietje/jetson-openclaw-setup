@@ -1,15 +1,15 @@
-# 🤖 Jetson OpenClaw Setup
+# 🤖 OpenClaw AI Assistant Infrastructure
 
 <div align="center">
 
 [![Release](https://img.shields.io/github/v/release/markfietje/jetson-openclaw-setup?style=for-the-badge&logo=github)](https://github.com/markfietje/jetson-openclaw-setup/releases)
 [![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue?style=for-the-badge)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Jetson%20Nano-green?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com/embedded/jetson-nano)
+[![Platform](https://img.shields.io/badge/platform-ARM64%20%26%20AMD64-9cf?style=for-the-badge&logo=linux)](https://github.com/markfietje/jetson-openclaw-setup/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70%2B-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 
-**Enterprise-grade AI assistant infrastructure for NVIDIA Jetson Nano**
+**Production-ready AI assistant infrastructure for Ubuntu/Debian Linux**
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Installation](#-installation) • [Documentation](#-documentation) • [Contributing](#-contributing)
+[Features](#-features) • [Supported Platforms](#-supported-platforms) • [Quick Start](#-quick-start) • [Installation](#-installation) • [Contributing](#-contributing)
 
 </div>
 
@@ -17,14 +17,42 @@
 
 ## 📋 Overview
 
-Jetson OpenClaw Setup provides a production-ready monorepo for deploying AI assistant infrastructure on NVIDIA Jetson Nano. It includes a knowledge graph engine, Signal messaging bridge, and seamless OpenClaw integration.
+OpenClaw AI Assistant Infrastructure provides a solid, well-built monorepo for deploying AI assistant infrastructure on Linux. It includes a knowledge graph engine, Signal messaging bridge, and seamless OpenClaw integration.
 
-**Key Highlights:**
+**What you get:**
 - 🧠 **Brain Server** - Knowledge graph + semantic search engine
 - 📡 **Signal Gateway** - Signal ↔ OpenClaw bridge with auto-retry
-- 📦 **Debian Packages** - Professional package management
+- 📦 **Debian Packages** - Easy installation via .deb packages
 - 🔒 **Security Hardened** - Systemd isolation, CORS protection, input validation
-- ⚡ **Optimized** - ARM64 Cortex-A57 tuned binaries
+- 🚀 **Multi-Architecture** - Native support for ARM64 and AMD64
+
+---
+
+## 🎯 Supported Platforms
+
+### ARM64 (64-bit ARM)
+Works on any ARM64 Linux system:
+
+| Platform | Architecture | Status |
+|----------|--------------|--------|
+| **NVIDIA Jetson Nano** | ARM64 Cortex-A57 | ✅ Tested |
+| **NVIDIA Jetson Xavier NX** | ARM64 Carmel | ✅ Compatible |
+| **NVIDIA Jetson Orin** | ARM64 Cortex-A78AE | ✅ Compatible |
+| **Raspberry Pi 4** | ARM64 Cortex-A72 | ✅ Compatible |
+| **Raspberry Pi 5** | ARM64 Cortex-A76 | ✅ Compatible |
+| **Rock Pi 5** | ARM64 Cortex-A76 | ✅ Compatible |
+| **Orange Pi 5** | ARM64 Cortex-A76 | ✅ Compatible |
+| **AWS Graviton** | ARM64 Neoverse | ✅ Compatible |
+| **Other ARM64 Linux** | ARM64 | ✅ Should work |
+
+### AMD64 (x86_64)
+Works on any 64-bit Linux system:
+
+| Platform | Architecture | Status |
+|----------|--------------|--------|
+| **Ubuntu Desktop/Server** | AMD64 x86_64 | ✅ Tested |
+| **Debian** | AMD64 x86_64 | ✅ Compatible |
+| **Other Linux** | AMD64 x86_64 | ✅ Should work |
 
 ---
 
@@ -34,13 +62,13 @@ Jetson OpenClaw Setup provides a production-ready monorepo for deploying AI assi
 
 **Knowledge Graph & Semantic Search Engine**
 
-- 📚 1,293 knowledge entries with 384-dimensional embeddings
-- 🕸️ 461 entities + 779 relationships in knowledge graph
 - 🔍 Semantic search with model2vec-rs (minishlab/potion-retrieval-32M)
+- 🕸️ Knowledge graph with entity/relationship extraction
 - 🎯 Graph traversal with configurable depth (max 3)
 - 🛡️ Prompt injection detection for security
 - 🔌 RESTful API: health, stats, search, ingest, graph/*
-- ⚡ <1ms query speed, 25% memory usage
+- ⚡ <1ms query speed
+- 💾 SQLite database with connection pooling
 
 ### 📡 Signal Gateway
 
@@ -59,16 +87,24 @@ Jetson OpenClaw Setup provides a production-ready monorepo for deploying AI assi
 
 ### Prerequisites
 
-- **Hardware:** NVIDIA Jetson Nano (ARM64)
-- **Software:** Debian/Ubuntu, systemd
-- **Network:** SSH access configured
+- **Hardware:** Any ARM64 or AMD64 Linux system
+- **Software:** Ubuntu/Debian, systemd
+- **Architecture:** Choose based on your platform
 
 ### Installation
 
-**Option 1: Debian Package (Recommended)**
+**Step 1: Choose your architecture**
 
+| Platform | Architecture | Download |
+|----------|--------------|----------|
+| Jetson Nano, Raspberry Pi 4/5 | ARM64 | `_arm64.deb` |
+| Regular Linux PC/Server | AMD64 | `_amd64.deb` |
+
+**Step 2: Download and install**
+
+**For ARM64 (Jetson Nano, Raspberry Pi, etc.):**
 ```bash
-# Download latest release
+# Download latest ARM64 packages
 wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/brain-server_0.8.1_arm64.deb
 wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/signal-gateway_0.1.1_arm64.deb
 
@@ -79,17 +115,17 @@ sudo dpkg -i signal-gateway_0.1.1_arm64.deb
 # Services auto-start and enable
 ```
 
-**Option 2: Binary Installation**
-
+**For AMD64 (Regular Linux):**
 ```bash
-# Download and extract
-wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/brain-server-arm64.tar.gz
-tar xzf brain-server-arm64.tar.gz
-sudo mv brain-server /usr/local/bin/
+# Download latest AMD64 packages
+wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/brain-server_0.8.1_amd64.deb
+wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/signal-gateway_0.1.1_amd64.deb
 
-# Install systemd service (manual setup required)
-sudo systemctl enable brain-server
-sudo systemctl start brain-server
+# Install packages
+sudo dpkg -i brain-server_0.8.1_amd64.deb
+sudo dpkg -i signal-gateway_0.1.1_amd64.deb
+
+# Services auto-start and enable
 ```
 
 ### Verify Installation
@@ -153,20 +189,21 @@ url = "http://127.0.0.1:8765"
 
 ## 🛡️ Security
 
-- ✅ **Loopback-only binding** - No internet exposure
+Good security practices built-in:
+
+- ✅ **Loopback-only binding** - Services only accessible locally
 - ✅ **Systemd hardening** - NoNewPrivileges, ProtectSystem, ProtectHome
 - ✅ **CORS protection** - Environment-based origin validation
 - ✅ **Input validation** - SQL injection prevention, message validation
 - ✅ **Rate limiting** - DoS protection
-- ✅ **Dedicated users** - Service isolation with system users
-- ✅ **Security audit** - A+ rating
+- ✅ **Dedicated users** - Services run as isolated system users
 
 ---
 
 ## 📊 Performance
 
 ### Brain Server
-- **Memory:** 1,043 MB (25% of 4 GB)
+- **Memory:** ~150 MB
 - **Query Speed:** <1ms per search
 - **Database:** ~10 MB (compressed, indexed)
 - **Startup:** ~3 seconds
@@ -188,12 +225,13 @@ url = "http://127.0.0.1:8765"
 git clone https://github.com/markfietje/jetson-openclaw-setup.git
 cd jetson-openclaw-setup
 
-# Build ARM64 binaries (requires cross-compilation tools)
+# Build for ARM64 (requires cross-compilation tools)
 ./scripts/build-deb-packages.sh
 
 # Or build individual services
 cd services/brain-server
-cargo build --release --target aarch64-unknown-linux-gnu
+cargo build --release --target aarch64-unknown-linux-gnu  # ARM64
+cargo build --release --target x86_64-unknown-linux-gnu   # AMD64
 ```
 
 ### Run Tests
@@ -223,9 +261,9 @@ cargo clippy -- -D warnings
 
 ## 🚢 Deployment
 
-### Automated Deployment
+### Automated Release
 
-Push a tag to trigger the release workflow:
+Push a tag to trigger the multi-architecture release:
 
 ```bash
 git tag v0.9.0
@@ -235,26 +273,36 @@ git push origin v0.9.0
 The workflow will:
 1. ✅ Run tests and validation
 2. 📝 Generate comprehensive changelog
-3. 🏗️ Build ARM64 binaries
-4. 📦 Create Debian packages
+3. 🏗️ Build ARM64 and AMD64 binaries
+4. 📦 Create Debian packages for both architectures
 5. 🚀 Deploy to GitHub Releases
-6. 🎯 Deploy to Jetson Nano (automatic)
+6. 🎯 Deploy to Jetson Nano (ARM64, automatic)
 
 ### Manual Deployment
 
+**For ARM64 devices:**
 ```bash
-# Copy package to Jetson
-scp brain-server_0.8.1_arm64.deb jetson@jetson:/tmp/
+# Copy package to device
+scp brain-server_0.8.1_arm64.deb user@device:/tmp/
 
-# Install on Jetson
-ssh jetson@jetson "sudo dpkg -i /tmp/brain-server_0.8.1_arm64.deb"
+# Install on device
+ssh user@device "sudo dpkg -i /tmp/brain-server_0.8.1_arm64.deb"
+```
+
+**For AMD64 servers:**
+```bash
+# Copy package to server
+scp brain-server_0.8.1_amd64.deb user@server:/tmp/
+
+# Install on server
+ssh user@server "sudo dpkg -i /tmp/brain-server_0.8.1_amd64.deb"
 ```
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our contributing guidelines:
+Contributions welcome! Here's how:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -281,14 +329,14 @@ at your option.
 
 ---
 
-## 📈 Status
+## 📈 Project Status
 
-| Component | Status | Version |
-|-----------|--------|---------|
-| Brain Server | ✅ Production Ready | v0.8.1 |
-| Signal Gateway | ✅ Production Ready | v0.1.1 |
-| CI/CD Pipeline | ✅ Active | - |
-| Security Audit | ✅ A+ Rating | - |
+| Component | Status | Version | Architectures |
+|-----------|--------|---------|---------------|
+| Brain Server | ✅ Stable | v0.8.1 | ARM64, AMD64 |
+| Signal Gateway | ✅ Stable | v0.1.1 | ARM64, AMD64 |
+| CI/CD Pipeline | ✅ Active | - | Multi-arch builds |
+| Security | ✅ Good practices | - | Hardened services |
 
 ---
 
@@ -296,6 +344,7 @@ at your option.
 
 **Mark Fietje**
 - GitHub: [@markfietje](https://github.com/markfietje)
+- X: [@mark_fietje](https://x.com/mark_fietje)
 
 ---
 
@@ -304,14 +353,17 @@ at your option.
 - [OpenClaw](https://github.com/openclaw) - AI assistant framework
 - [model2vec-rs](https://github.com/leeeeeeeem/model2vec-rs) - Embedding engine
 - [presage](https://github.com/whisperfish/presage) - Signal library
+- Raspberry Pi Foundation
 - NVIDIA Jetson Community
 
 ---
 
 <div align="center">
 
-**Built with ❤️ and ☕ on Jetson Nano**
+**Built with ❤️ and ☕**
 
-**[⬆ Back to Top](#-jetson-openclaw-setup)**
+**Works on Jetson Nano, Raspberry Pi, and any Linux system**
+
+**[⬆ Back to Top](#-openclaw-ai-assistant-infrastructure)**
 
 </div>
