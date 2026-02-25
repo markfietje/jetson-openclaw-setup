@@ -1,0 +1,71 @@
+#!/bin/bash
+# Pre-remove script for brain-server
+# This script runs before the package is removed
+
+set -e
+
+# Package information
+PACKAGE_NAME="brain-server"
+SERVICE_NAME="brain-server"
+
+# Colors for output (if terminal supports it)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    NC='\033[0m'
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    NC=''
+fi
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $*"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $*"
+}
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        log_info "Preparing to remove ${PACKAGE_NAME}..."
+
+        # Stop the service if it's running
+        if systemctl is-active --quiet ${SERVICE_NAME}; then
+            log_info "Stopping ${SERVICE_NAME} service..."
+            systemctl stop ${SERVICE_NAME} || {
+                log_warn "Could not stop ${SERVICE_NAME} service"
+            }
+        else
+            log_info "${SERVICE_NAME} service is not running"
+        fi
+
+        # Disable the service if this is a removal (not upgrade)
+        if [ "$1" = "remove" ]; then
+            if systemctl is-enabled --quiet ${SERVICE_NAME} 2>/dev/null; then
+                log_info "Disabling ${SERVICE_NAME} service..."
+                systemctl disable ${SERVICE_NAME} || {
+                    log_warn "Could not disable ${SERVICE_NAME} service"
+                }
+            fi
+        fi
+        ;;
+
+    failed-upgrade)
+        # Package upgrade failed, nothing to do
+        log_warn "Previous upgrade failed, continuing with removal..."
+        ;;
+
+    *)
+        log_info "Unknown action: $1"
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,135 @@
+#!/bin/bash
+# Post-remove script for brain-server
+# This script runs after the package is removed
+
+set -e
+
+# Package information
+PACKAGE_NAME="brain-server"
+SERVICE_NAME="brain-server"
+CONFIG_DIR="/etc/brain-server"
+DATA_DIR="/var/lib/brain-server"
+USER="brain-server"
+
+# Colors for output (if terminal supports it)
+if [ -t 1 ]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+else
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+fi
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $*"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $*"
+}
+
+log_note() {
+    echo -e "${BLUE}[NOTE]${NC} $*"
+}
+
+case "$1" in
+    purge)
+        log_info "Purging ${PACKAGE_NAME} configuration and data..."
+
+        # Remove systemd service file
+        if [ -f "/etc/systemd/system/${SERVICE_NAME}.service" ]; then
+            log_info "Removing systemd service file..."
+            rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
+        fi
+
+        # Reload systemd
+        systemctl daemon-reload || {
+            log_warn "Could not reload systemd daemon"
+        }
+
+        # Remove configuration directory
+        if [ -d "${CONFIG_DIR}" ]; then
+            log_info "Removing configuration directory: ${CONFIG_DIR}"
+            rm -rf "${CONFIG_DIR}" || {
+                log_warn "Could not remove ${CONFIG_DIR}"
+            }
+        fi
+
+        # Ask before removing data directory
+        if [ -d "${DATA_DIR}" ]; then
+            if [ -t 0 ]; then
+                # Interactive mode
+                echo ""
+                log_warn "Data directory found: ${DATA_DIR}"
+                log_note "This contains your database and knowledge graph data."
+                read -p "Remove data directory? (y/N) " -n 1 -r
+                echo
+                if [[ $REPLY =~ ^[Yy]$ ]]; then
+                    log_info "Removing data directory..."
+                    rm -rf "${DATA_DIR}" || {
+                        log_error "Could not remove ${DATA_DIR}"
+                    }
+                else
+                    log_note "Data directory preserved at: ${DATA_DIR}"
+                fi
+            else
+                # Non-interactive mode - preserve data
+                log_note "Data directory preserved at: ${DATA_DIR}"
+                log_note "To remove manually: sudo rm -rf ${DATA_DIR}"
+            fi
+        fi
+
+        # Remove user (only if it exists and has no processes)
+        if id -u ${USER} &>/dev/null; then
+            # Check if user has any running processes
+            if pgrep -u ${USER} > /dev/null 2>&1; then
+                log_warn "User ${USER} has running processes, not removing"
+            else
+                log_info "Removing system user: ${USER}"
+                userdel ${USER} 2>/dev/null || {
+                    log_warn "Could not remove user ${USER} (may have leftover files)"
+                }
+            fi
+        fi
+
+        log_info "Purge complete"
+        ;;
+
+    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # Just remove - config and data preserved
+        log_info "Package removed (configuration and data preserved)"
+
+        # Reload systemd in case service file changed
+        systemctl daemon-reload 2>/dev/null || true
+        ;;
+
+    *)
+        log_info "Unknown action: $1"
+        ;;
+esac
+
+# Summary
+if [ "$1" = "purge" ]; then
+    echo ""
+    log_info "═══════════════════════════════════════════════════════"
+    log_info "  Brain Server Completely Removed"
+    log_info "═══════════════════════════════════════════════════════"
+    echo ""
+    if [ -d "${DATA_DIR}" ]; then
+        log_note "Data preserved at: ${DATA_DIR}"
+        log_note "To remove: sudo rm -rf ${DATA_DIR}"
+    fi
+    echo ""
+fi
+
+exit 0

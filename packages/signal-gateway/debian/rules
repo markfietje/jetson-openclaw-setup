@@ -1,0 +1,76 @@
+#!/usr/bin/make -f
+# Debian build rules for signal-gateway
+# This is a simple package that installs a pre-built binary
+
+# Enable hardening options for security
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# Reduce debug symbols to minimize package size
+export DEB_CFLAGS_MAINT_APPEND = -Os
+
+# Package directories
+BINARY_DIR = debian/signal-gateway/usr/local/bin
+SERVICE_DIR = debian/signal-gateway/etc/systemd/system
+CONFIG_DIR = debian/signal-gateway/etc/signal-gateway
+DATA_DIR = debian/signal-gateway/var/lib/signal-gateway
+DOC_DIR = debian/signal-gateway/usr/share/doc/signal-gateway
+
+%:
+	dh $@
+
+# Override build step - we're packaging a pre-built binary
+override_dh_auto_build:
+	@echo "No build step required - packaging pre-built binary"
+
+# Override install step
+override_dh_auto_install:
+	@echo "Installing signal-gateway files..."
+
+	# Create directories
+	mkdir -p $(BINARY_DIR)
+	mkdir -p $(SERVICE_DIR)
+	mkdir -p $(CONFIG_DIR)
+	mkdir -p $(DATA_DIR)/signal-data
+	mkdir -p $(DATA_DIR)/logs
+	mkdir -p $(DOC_DIR)
+
+	# Install binary (assumes it's in the parent directory)
+	if [ -f ../../services/signal-gateway/target/release/signal-gateway ]; then \
+		cp ../../services/signal-gateway/target/release/signal-gateway $(BINARY_DIR)/; \
+		chmod 755 $(BINARY_DIR)/signal-gateway; \
+	fi
+
+	# Install wrapper script (assumes it's in the parent directory)
+	if [ -f ../../scripts/signal-gateway-wrapper.sh ]; then \
+		cp ../../scripts/signal-gateway-wrapper.sh $(BINARY_DIR)/; \
+		chmod 755 $(BINARY_DIR)/signal-gateway-wrapper.sh; \
+	fi
+
+	# Install systemd service file
+	if [ -f signal-gateway.service ]; then \
+		cp signal-gateway.service $(SERVICE_DIR)/; \
+		chmod 644 $(SERVICE_DIR)/signal-gateway.service; \
+	fi
+
+	# Install documentation
+	if [ -f README.md ]; then \
+		cp README.md $(DOC_DIR)/; \
+	fi
+	if [ -f LICENSE ]; then \
+		cp LICENSE $(DOC_DIR)/; \
+	fi
+
+# Don't run tests during package build
+override_dh_auto_test:
+	@echo "Skipping tests during package build"
+
+# Don't strip the binary (already optimized)
+override_dh_strip:
+	@echo "Skipping strip - binary already optimized"
+
+# Ensure proper permissions
+override_dh_fixperms:
+	dh_fixperms
+	chmod 750 $(DATA_DIR)
+	chmod 750 $(DATA_DIR)/signal-data
+	chmod 755 $(CONFIG_DIR)

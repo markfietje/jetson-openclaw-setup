@@ -1,0 +1,38 @@
+Source: signal-gateway
+Section: net
+Priority: optional
+Maintainer: Mark Fietje <mark@fietje.io>
+Build-Depends: debhelper (>= 12)
+Standards-Version: 4.5.1
+Homepage: https://github.com/markfietje/jetson-openclaw-setup
+
+Package: signal-gateway
+Architecture: arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}, libc6 (>= 2.31)
+Recommends: brain-server
+Suggests: signal-gateway-doc
+Installed-Size: 10240
+Maintainer: Mark Fietje <mark@fietje.io>
+Description: Lightweight Signal daemon for OpenClaw AI integration
+ Signal Gateway is a high-performance Signal messaging bridge designed
+ for the Jetson Nano platform. It provides a RESTful API and Server-Sent
+ Events (SSE) stream for bidirectional Signal communication with the
+ OpenClaw AI assistant.
+ .
+ Key features:
+ .
+  - Automatic Signal receiver startup with 5-retry exponential backoff
+  - Phone number to UUID resolution with caching
+  - HTTP + JSON-RPC API for sending messages
+  - SSE message stream for real-time receiving
+  - Integration with Brain Server for AI-powered responses
+  - Clean shutdown in under 100ms
+  - Production-ready systemd integration
+  - Rate limiting and input validation
+ .
+ This package includes the signal-gateway binary, wrapper script, and
+ systemd service file. Configuration files are installed to
+ /etc/signal-gateway/ and Signal data to /var/lib/signal-gateway/.
+ .
+ On first run, you will need to link your Signal device by scanning
+ a QR code displayed in the logs.

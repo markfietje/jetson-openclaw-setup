@@ -1,0 +1,72 @@
+#!/usr/bin/make -f
+# Debian build rules for brain-server
+# This is a simple package that installs a pre-built binary
+
+# Enable hardening options for security
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+# Reduce debug symbols to minimize package size
+export DEB_CFLAGS_MAINT_APPEND = -Os
+
+# Package directories
+BINARY_DIR = debian/brain-server/usr/local/bin
+SERVICE_DIR = debian/brain-server/etc/systemd/system
+CONFIG_DIR = debian/brain-server/etc/brain-server
+DATA_DIR = debian/brain-server/var/lib/brain-server
+DOC_DIR = debian/brain-server/usr/share/doc/brain-server
+
+%:
+	dh $@
+
+# Override build step - we're packaging a pre-built binary
+override_dh_auto_build:
+	@echo "No build step required - packaging pre-built binary"
+
+# Override install step
+override_dh_auto_install:
+	@echo "Installing brain-server files..."
+
+	# Create directories
+	mkdir -p $(BINARY_DIR)
+	mkdir -p $(SERVICE_DIR)
+	mkdir -p $(CONFIG_DIR)
+	mkdir -p $(DATA_DIR)/db
+	mkdir -p $(DATA_DIR)/models
+	mkdir -p $(DATA_DIR)/logs
+	mkdir -p $(DOC_DIR)
+
+	# Install binary (assumes it's in the parent directory)
+	if [ -f ../../services/brain-server/target/release/brain-server ]; then \
+		cp ../../services/brain-server/target/release/brain-server $(BINARY_DIR)/; \
+		chmod 755 $(BINARY_DIR)/brain-server; \
+	fi
+
+	# Install systemd service file
+	if [ -f brain-server.service ]; then \
+		cp brain-server.service $(SERVICE_DIR)/; \
+		chmod 644 $(SERVICE_DIR)/brain-server.service; \
+	fi
+
+	# Install documentation
+	if [ -f README.md ]; then \
+		cp README.md $(DOC_DIR)/; \
+	fi
+	if [ -f LICENSE ]; then \
+		cp LICENSE $(DOC_DIR)/; \
+	fi
+
+# Don't run tests during package build
+override_dh_auto_test:
+	@echo "Skipping tests during package build"
+
+# Don't strip the binary (already optimized)
+override_dh_strip:
+	@echo "Skipping strip - binary already optimized"
+
+# Ensure proper permissions
+override_dh_fixperms:
+	dh_fixperms
+	chmod 750 $(DATA_DIR)
+	chmod 750 $(DATA_DIR)/db
+	chmod 750 $(DATA_DIR)/models
+	chmod 755 $(CONFIG_DIR)
