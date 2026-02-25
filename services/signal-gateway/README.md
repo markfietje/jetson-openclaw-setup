@@ -375,11 +375,11 @@ When a Signal message is received, the gateway forwards a JSON payload:
 
 ```json
 {
-  "message": "+353833006868 sent: Hello from Signal!",
+  "message": "+15551234567 sent: Hello from Signal!",
   "name": "Signal",
   "agent_id": "main",
   "channel": "signal",
-  "to": "+353833006868",
+  "to": "+15551234567",
   "deliver": true,
   "wake_mode": "now"
 }

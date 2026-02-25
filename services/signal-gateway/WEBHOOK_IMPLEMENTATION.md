@@ -50,11 +50,11 @@ Back to Jesslyn ✅
 **Payload Format:**
 ```json
 {
-  "message": "+353833006868 sent: Hello from Jesslyn!",
+  "message": "+15557654321 sent: Hello from Jesslyn!",
   "name": "Signal",
   "agentId": "main",
   "channel": "signal",
-  "to": "+353833006868",
+  "to": "+15557654321",
   "deliver": true,
   "wakeMode": "now"
 }
@@ -276,11 +276,11 @@ curl -X POST http://127.0.0.1:18789/hooks/agent \
   -H "Authorization: Bearer signal-gateway-webhook-secret-2026" \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "Test message from +353833006868",
+    "message": "Test message from +15557654321",
     "name": "Signal",
     "agentId": "main",
     "channel": "signal",
-    "to": "+353833006868",
+    "to": "+15557654321",
     "deliver": true,
     "wakeMode": "now"
   }'
@@ -395,7 +395,7 @@ journalctl --user -u openclaw-gateway -f
 **Fix:**
 - Verify webhook payload includes `deliver: true`
 - Check OpenClaw Signal channel config
-- Test sending manually: `openclaw message send --to +353833006868 --message "test"`
+- Test sending manually: `openclaw message send --to +15557654321 --message "test"`
 
 ---
 

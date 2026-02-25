@@ -20,7 +20,7 @@ sudo systemctl start signal-gateway
 ```bash
 curl -X POST http://localhost:8080/v1/cache/seed \
   -H "Content-Type: application/json" \
-  -d "{\"phone\": \"+353863363433\", \"uuid\": \"1c46c936-2fb7-42e5-818e-a3f20da4627d\"}"
+  -d "{\"phone\": \"+15551234567\", \"uuid\": \"1c46c936-2fb7-42e5-818e-a3f20da4627d\"}"
 ```
 
 ### 4. Test Sending
@@ -28,7 +28,7 @@ curl -X POST http://localhost:8080/v1/cache/seed \
 # Test with phone number
 curl -X POST http://localhost:8080/api/v1/rpc \
   -H "Content-Type: application/json" \
-  -d "{\"jsonrpc\":\"2.0\",\"method\":\"sendMessage\",\"params\":{\"recipient\":\"+353863363433\",\"message\":\"Test!\"},\"id\":1}"
+  -d "{\"jsonrpc\":\"2.0\",\"method\":\"sendMessage\",\"params\":{\"recipient\":\"+15551234567\",\"message\":\"Test!\"},\"id\":1}"
 
 # Test with UUID directly  
 curl -X POST http://localhost:8080/api/v1/rpc \
@@ -51,7 +51,7 @@ sudo systemctl restart openclaw-gateway
 | Format | Example | Status |
 |--------|---------|--------|
 | UUID | 1c46c936-2fb7-42e5-818e-a3f20da4627d | Works |
-| Phone (cached) | +353863363433 | Works after seeding |
+| Phone (cached) | +15551234567 | Works after seeding |
 | Username | markfietje.77 | Not implemented |
 
 ## Key Files
@@ -94,7 +94,7 @@ Update `src/api/mod.rs` to normalize all recipient formats:
 
 | Input Format | Example | Normalization |
 |--------------|---------|---------------|
-| Phone number | `+353863363433` | Resolve via cache/CDS |
+| Phone number | `+15551234567` | Resolve via cache/CDS |
 | UUID | `1c46c936-...` | Pass through |
 | Username | `markfietje.77` | Resolve via username_hash API |
 | `u:` prefix | `u:1c46c936-...` | Strip prefix |

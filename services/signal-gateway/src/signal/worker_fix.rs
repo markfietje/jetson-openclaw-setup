@@ -4,7 +4,7 @@
 //!
 //! The Problem:
 //! - Signal uses ACI (UUID) internally for all messaging
-//! - OpenClaw sends phone numbers (e.g., +353863363433)
+//! - OpenClaw sends phone numbers (e.g., +15551234567)
 //! - ServiceId::parse_from_service_id_string() fails on phone numbers
 //!
 //! The Solution:
@@ -104,15 +104,15 @@ mod tests {
     fn test_is_uuid() {
         let cache = RecipientCache::new();
         assert!(cache.is_uuid("550e8400-e29b-41d4-a716-446655440000"));
-        assert!(!cache.is_uuid("+353863363433"));
+        assert!(!cache.is_uuid("+15551234567"));
         assert!(!cache.is_uuid("not-a-uuid"));
     }
 
     #[test]
     fn test_cache_lookup() {
         let cache = RecipientCache::new();
-        cache.insert("+353863363433".to_string(), "550e8400-e29b-41d4-a716-446655440000".to_string());
-        assert_eq!(cache.get("+353863363433"), Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
+        cache.insert("+15551234567".to_string(), "550e8400-e29b-41d4-a716-446655440000".to_string());
+        assert_eq!(cache.get("+15551234567"), Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
     }
 
     #[test]
@@ -125,13 +125,13 @@ mod tests {
     #[test]
     fn test_resolve_cached_phone() {
         let cache = RecipientCache::new();
-        cache.insert("+353863363433".to_string(), "550e8400-e29b-41d4-a716-446655440000".to_string());
-        assert_eq!(cache.resolve("+353863363433").unwrap(), "550e8400-e29b-41d4-a716-446655440000");
+        cache.insert("+15551234567".to_string(), "550e8400-e29b-41d4-a716-446655440000".to_string());
+        assert_eq!(cache.resolve("+15551234567").unwrap(), "550e8400-e29b-41d4-a716-446655440000");
     }
 
     #[test]
     fn test_resolve_unknown() {
         let cache = RecipientCache::new();
-        assert!(cache.resolve("+353863363433").is_err());
+        assert!(cache.resolve("+15551234567").is_err());
     }
 }
