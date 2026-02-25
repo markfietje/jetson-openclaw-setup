@@ -18,7 +18,7 @@ env:
 jobs:
   validate-tag:
     name: Validate Release Tag
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.parse.outputs.version }}
       is_valid: ${{ steps.validate.outputs.is_valid }}
@@ -65,7 +65,7 @@ jobs:
 
   pre-release-tests:
     name: Pre-Release Tests
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: validate-tag
     if: needs.validate-tag.outputs.is_valid == 'true'
 
@@ -119,7 +119,7 @@ jobs:
 
   generate-changelog:
     name: Generate Changelog
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [validate-tag, pre-release-tests]
     if: always() && needs.pre-release-tests.result == 'success'
 
@@ -219,7 +219,7 @@ jobs:
 
   build-release-artifacts:
     name: Build Release Artifacts
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [validate-tag, generate-changelog]
     if: always() && needs.generate-changelog.result == 'success'
 
@@ -301,7 +301,7 @@ jobs:
 
   create-github-release:
     name: Create GitHub Release
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs:
       - validate-tag
       - generate-changelog
@@ -352,7 +352,7 @@ jobs:
 
   deploy-to-jetson:
     name: Deploy Release to Jetson
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs:
       - validate-tag
       - build-release-artifacts
@@ -499,7 +499,7 @@ jobs:
 
   release-notification:
     name: Send Release Notification
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs:
       - validate-tag
       - create-github-release

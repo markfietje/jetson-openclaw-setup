@@ -47,7 +47,7 @@ jobs:
   # ==================== SECURITY SCANNING ====================
   security-scan:
     name: 🔒 Security Scanning
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     if: github.event.inputs.skip_security_scans != 'true'
 
     steps:
@@ -116,7 +116,7 @@ jobs:
   # ==================== CODE QUALITY ====================
   code-quality:
     name: 📊 Code Quality Analysis
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [security-scan]
     if: always() && needs.security-scan.result != 'failure'
 
@@ -194,7 +194,7 @@ jobs:
   # ==================== TESTING ====================
   comprehensive-tests:
     name: 🧪 Comprehensive Testing
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [code-quality]
     if: always() && needs.code-quality.result != 'failure'
 
@@ -257,7 +257,7 @@ jobs:
   # ==================== PERFORMANCE TESTING ====================
   performance-tests:
     name: ⚡ Performance Testing
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [comprehensive-tests]
     if: always() && needs.comprehensive-tests.result == 'success' && github.event.inputs.skip_performance_tests != 'true'
 
@@ -375,7 +375,7 @@ jobs:
   # ==================== BUILD & ARTIFACT ====================
   build-artifacts:
     name: 🏗️ Build Production Artifacts
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [comprehensive-tests, performance-tests]
     if: always() && needs.comprehensive-tests.result == 'success'
 
@@ -449,7 +449,7 @@ jobs:
   # ==================== DEPLOYMENT ====================
   deploy-staging:
     name: 🚀 Deploy to Staging
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [build-artifacts]
     if: github.ref == 'refs/heads/dev'
     environment:
@@ -479,7 +479,7 @@ jobs:
 
   deploy-production:
     name: 🎯 Deploy to Production
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [build-artifacts, deploy-staging]
     if: github.ref == 'refs/heads/main'
     environment:
@@ -560,7 +560,7 @@ jobs:
   # ==================== MONITORING & ALERTING ====================
   post-deployment-checks:
     name: 📈 Post-Deployment Monitoring
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [deploy-production]
     if: always() && needs.deploy-production.result == 'success'
 
@@ -625,7 +625,7 @@ jobs:
   # ==================== CLEANUP ====================
   cleanup:
     name: 🧹 Cleanup
-    runs-on: apple-container
+    runs-on: ubuntu-latest
     needs: [deploy-production, post-deployment-checks]
     if: always()
 
