@@ -861,58 +861,24 @@ impl SignalWorker {
                 (dm.body.clone(), a, q, g)
             }
             ContentBody::SynchronizeMessage(sm) => {
-                tracing::debug!("[SYNC] Full SyncMessage: {:?}", sm);
-
-                // 1. Handle sent messages (what you sent from other devices)
+                tracing::info!("[SYNC] SynchronizeMessage received");
                 if let Some(sent) = sm.sent.as_ref() {
                     tracing::info!(
-                        "[SYNC] Sent message to: {:?}",
+                        "[SYNC] sent exists, destination: {:?}",
                         sent.destination_service_id
                     );
-
-                    // Handle regular messages
+                    tracing::info!("[SYNC] sent message: {:?}", sent.message);
                     if let Some(msg) = sent.message.as_ref() {
-                        tracing::info!("[SYNC] Message body: {:?}", msg.body);
-                        return (msg.body.clone(), None, None, None);
+                        tracing::info!("[SYNC] message body: {:?}", msg.body);
+                        (msg.body.clone(), None, None, None)
+                    } else {
+                        tracing::warn!("[SYNC] no message in sent");
+                        (None, None, None, None)
                     }
-
-                    // Handle edited messages
-                    if let Some(edit) = sent.edit_message.as_ref() {
-                        if let Some(msg) = edit.data_message.as_ref() {
-                            tracing::info!("[SYNC] Edited message body: {:?}", msg.body);
-                            return (msg.body.clone(), None, None, None);
-                        }
-                    }
-
-                    tracing::debug!("[SYNC] No message/edit in sent");
-                    return (None, None, None, None);
+                } else {
+                    tracing::debug!("[SYNC] non-message SyncMessage (read receipt, contacts, etc.)");
+                    (None, None, None, None)
                 }
-
-                // 2. Handle read receipts
-                if !sm.read.is_empty() {
-                    for r in &sm.read {
-                        tracing::info!(
-                            "[SYNC] Read receipt: {:?} read at {}",
-                            r.sender_aci,
-                            r.timestamp.unwrap_or(0)
-                        );
-                    }
-                    return (None, None, None, None);
-                }
-
-                // 3. Log other sync types for debugging
-                if sm.contacts.is_some() {
-                    tracing::info!("[SYNC] Contacts sync received");
-                }
-                if sm.groups.is_some() {
-                    tracing::info!("[SYNC] Groups sync received");
-                }
-                if sm.blocked.is_some() {
-                    tracing::info!("[SYNC] Blocked list sync received");
-                }
-
-                tracing::debug!("[SYNC] Unhandled SyncMessage type");
-                (None, None, None, None)
             }
             _ => return None,
         };
