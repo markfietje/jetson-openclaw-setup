@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.1.2] - 2026-02-25
+
+### Signal Gateway
+
+#### Dependencies
+- Updated libsignal to **v0.87.4** (latest - includes BoringSSL 5.0.1 security fixes)
+- Updated reqwest to **0.13.1** (latest)
+- Updated tokio to **1.49.0** (latest)
+- Updated all crates to latest versions
+
+#### Security
+- libsignal v0.87.4 includes BoringSSL 5.0.1 with latest security patches
+
+---
+
 ## [0.1.1] - 2026-02-24
 
 ### Signal Gateway

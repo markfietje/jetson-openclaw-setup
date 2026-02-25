@@ -1,8 +1,14 @@
 # signal-gateway
 
-**Lightweight Rust-based Signal daemon for OpenClaw on Jetson Nano. v0.1.1**
+**Lightweight Rust-based Signal daemon for OpenClaw on Jetson Nano. v0.1.2**
 
 A minimal, memory-efficient Signal gateway using [presage](https://github.com/whisperfish/presage) - no Java required! This replaces `signal-cli` for resource-constrained devices.
+
+## Latest Security Updates (v0.1.2)
+
+- **libsignal v0.87.4** - Latest Signal protocol with BoringSSL 5.0.1
+- **reqwest 0.13.1** - Latest HTTP client with security patches
+- All dependencies updated to latest versions
 
 ## Why This Instead of signal-cli?
 
@@ -16,38 +22,18 @@ A minimal, memory-efficient Signal gateway using [presage](https://github.com/wh
 
 ---
 
-## Enterprise-Grade Quality Standards
+## What's New in v0.1.2 (2026-02-25)
 
-This codebase follows professional software engineering practices:
+### Dependencies
+- Updated libsignal to **v0.87.4** (includes BoringSSL 5.0.1)
+- Updated reqwest to **0.13.1** (latest HTTP client)
+- Updated tokio to **1.49.0** (latest async runtime)
+- All crates to latest versions
 
-| Standard | Status | Verification |
-|----------|--------|--------------|
-| **Zero compiler warnings** | ✅ | `cargo build` |
-| **Zero clippy warnings** | ✅ | `cargo clippy -- -D warnings` |
-| **Zero dead code** | ✅ | `cargo clippy -- -D dead_code` |
-| **Unit tests** | ✅ | 13 tests passing |
-| **Input validation** | ✅ | UUID, phone, message validation |
-| **Security patches** | ✅ | Latest reqwest (0.13.1) |
-| **Semantic versioning** | ✅ | Follows semver 2.0.0 |
-| **Conventional commits** | ✅ | Follows conventionalcommits.org |
-| **Changelog** | ✅ | Keep a Changelog format |
+### Security
+- libsignal v0.87.4 with BoringSSL 5.0.1 - latest security patches
 
-### Build Verification
-
-```bash
-# Clone and verify
-git clone https://github.com/markfietje/jetson-openclaw-setup.git
-cd jetson-openclaw-setup/services/signal-gateway
-
-# Should show zero warnings
-cargo build 2>&1 | grep -c "warning"  # Should be 0
-
-# Should show zero clippy warnings  
-cargo clippy -- -D warnings 2>&1 | grep -c "warning"  # Should be 0
-
-# Should show 13 tests passing
-cargo test | grep "test result"
-```
+---
 
 ## What's New in v0.1.1 (2026-02-24)
 
@@ -220,7 +206,7 @@ curl -X POST http://localhost:8080/api/v1/rpc \
 
 ```bash
 curl http://localhost:8080/api/v1/check
-# {"status":"ok","version":"0.1.1"}
+# {"status":"ok","version":"0.1.2"}
 ```
 
 ---
