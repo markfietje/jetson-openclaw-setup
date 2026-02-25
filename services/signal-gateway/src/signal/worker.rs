@@ -836,6 +836,7 @@ impl SignalWorker {
                         dm.attachments
                             .iter()
                             .map(|x| SignalAttachment {
+                                id: None,
                                 content_type: x.content_type.clone(),
                                 filename: None,
                                 size: x.size.map(|s| s as u64),
@@ -901,8 +902,11 @@ impl SignalWorker {
                     group_info: group,
                     quote,
                     mentions: None,
+                    reaction: None,
                 }),
                 sync_message: None,
+                source_name: None,
+                reaction_message: None,
             },
         })
     }
