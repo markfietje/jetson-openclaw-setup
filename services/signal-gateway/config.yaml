@@ -9,8 +9,10 @@ signal:
   command_timeout_ms: 30000
   max_sends_per_second: 5
 
-webhook:
-  url: "http://127.0.0.1:18789/hooks/agent"
-  token: "signal-gateway-webhook-secret-2026"
-  retry_attempts: 3
-  retry_delay_ms: 1000
+# webhook: DISABLED - OpenClaw Signal channel uses SSE (Server-Sent Events) instead
+# OpenClaw consumes messages via GET /api/v1/events, not webhook POST
+# webhook:
+#   url: "http://127.0.0.1:18789/hooks/agent"
+#   token: "signal-gateway-webhook-secret-2026"
+#   retry_attempts: 3
+#   retry_delay_ms: 1000

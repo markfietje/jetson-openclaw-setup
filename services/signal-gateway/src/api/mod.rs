@@ -315,6 +315,7 @@ async fn receive_messages(
 }
 
 /// SSE stream - OpenClaw-compatible format
+/// Sends events with "event: receive" type as OpenClaw expects
 async fn events_stream(AxumState(state): AxumState<AppState>) -> impl IntoResponse {
     let signal = state.signal.clone();
 
@@ -328,9 +329,18 @@ async fn events_stream(AxumState(state): AxumState<AppState>) -> impl IntoRespon
         loop {
             match rx.recv().await {
                 Ok(msg) => {
-                    match serde_json::to_string(&msg) {
+                    // Wrap the message in the format OpenClaw expects
+                    let payload = json!({
+                        "envelope": msg.envelope
+                    });
+                    match serde_json::to_string(&payload) {
                         Ok(json_str) => {
-                            yield Ok::<_, Infallible>(Event::default().data(json_str));
+                            // OpenClaw expects "event: receive" for messages
+                            yield Ok::<_, Infallible>(
+                                Event::default()
+                                    .event("receive")
+                                    .data(json_str)
+                            );
                         }
                         Err(e) => {
                             tracing::error!("Failed to serialize message: {}", e);
