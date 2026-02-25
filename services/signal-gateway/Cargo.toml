@@ -9,6 +9,10 @@ license = "MIT OR Apache-2.0"
 presage = { git = "https://github.com/whisperfish/presage", branch = "main" }
 presage-store-sqlite = { git = "https://github.com/whisperfish/presage", branch = "main" }
 
+# Override presage's libsignal-service to use latest libsignal v0.87.4
+[patch."https://github.com/whisperfish/libsignal-service-rs"]
+libsignal-service = { git = "https://github.com/whisperfish/libsignal-service-rs", rev = "f5ec60055bc5430e52f0f3e09cd670e1dbd9a79e" }
+
 tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "fs"], default-features = false }
 
 axum = { version = "0.8.8", features = ["macros", "json"] }
@@ -16,7 +20,7 @@ tower-http = { version = "0.6.8", features = ["cors"] }
 tokio-stream = "0.1.18"
 async-stream = "0.3.6"
 
-reqwest = { version = "0.13.1", features = ["json"], default-features = false }
+reqwest = { version = "0.12", features = ["json"], default-features = false }
 
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
