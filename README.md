@@ -1,189 +1,317 @@
-# Jetson OpenClaw Setup 🤖
+# 🤖 Jetson OpenClaw Setup
 
-Monorepo for Mark'\''s AI assistant infrastructure, including brain-server, signal-gateway, and OpenClaw configurations.
+<div align="center">
 
-[![Release](https://img.shields.io/github/v/release/markfietje/jetson-openclaw-setup)](https://github.com/markfietje/jetson-openclaw-setup/releases)
-[![License](https://img.shields.io/github/license/markfietje/jetson-openclaw-setup)](LICENSE)
-[![GitHub Issues](https://img.shields.io/github/issues/markfietje/jetson-openclaw-setup)](https://github.com/markfietje/jetson-openclaw-setup/issues)
+[![Release](https://img.shields.io/github/v/release/markfietje/jetson-openclaw-setup?style=for-the-badge&logo=github)](https://github.com/markfietje/jetson-openclaw-setup/releases)
+[![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue?style=for-the-badge)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Jetson%20Nano-green?style=for-the-badge&logo=nvidia)](https://developer.nvidia.com/embedded/jetson-nano)
+[![Rust](https://img.shields.io/badge/rust-1.70%2B-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 
-## 🎯 Quick Links
+**Enterprise-grade AI assistant infrastructure for NVIDIA Jetson Nano**
 
-- 📖 **[Changelog](CHANGELOG.md)** - All notable changes
-- 🚀 **[Latest Release](https://github.com/markfietje/jetson-openclaw-setup/releases/tag/v1.0.0)** - v1.0.0
-- 📦 **[Services](#-services)** - What'\''s included
-- ⚡ **[Quick Start](#-quick-start)** - Get up and running
-- 🔧 **[Development](#-development)** - Build and test
-- 📊 **[Status](#-current-status)** - System health
+[Features](#-features) • [Quick Start](#-quick-start) • [Installation](#-installation) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
-## 📦 Services
+</div>
+
+---
+
+## 📋 Overview
+
+Jetson OpenClaw Setup provides a production-ready monorepo for deploying AI assistant infrastructure on NVIDIA Jetson Nano. It includes a knowledge graph engine, Signal messaging bridge, and seamless OpenClaw integration.
+
+**Key Highlights:**
+- 🧠 **Brain Server** - Knowledge graph + semantic search engine
+- 📡 **Signal Gateway** - Signal ↔ OpenClaw bridge with auto-retry
+- 📦 **Debian Packages** - Professional package management
+- 🔒 **Security Hardened** - Systemd isolation, CORS protection, input validation
+- ⚡ **Optimized** - ARM64 Cortex-A57 tuned binaries
+
+---
+
+## ✨ Features
 
 ### 🧠 Brain Server
-- **Language:** Rust
-- **Purpose:** Knowledge graph + semantic search engine
-- **Version:** v0.8.0
-- **Features:** 
-  - 1,293+ knowledge entries with 512-dimensional embeddings
-  - Entity extraction and relationship detection
-  - Knowledge graph with 461 entities + 779 relationships
-  - Graph traversal with configurable depth
-  - Semantic search with model2vec-rs
-  - Prompt injection detection
-  - Connection pooling with health checks
-  - API endpoints: health, stats, search, ingest, graph/*
+
+**Knowledge Graph & Semantic Search Engine**
+
+- 📚 1,293 knowledge entries with 384-dimensional embeddings
+- 🕸️ 461 entities + 779 relationships in knowledge graph
+- 🔍 Semantic search with model2vec-rs (minishlab/potion-retrieval-32M)
+- 🎯 Graph traversal with configurable depth (max 3)
+- 🛡️ Prompt injection detection for security
+- 🔌 RESTful API: health, stats, search, ingest, graph/*
+- ⚡ <1ms query speed, 25% memory usage
 
 ### 📡 Signal Gateway
-- **Language:** Rust
-- **Purpose:** Bridge between Signal messaging and OpenClaw
-- **Version:** v0.1.0
-- **Features:**
-  - Automatic receiver startup with 5-retry system
-  - Exponential backoff (5s → 10s → 20s → 40s → 80s)
-  - Phone number → UUID resolution with caching
-  - HTTP + JSON-RPC API
-  - SSE message stream for real-time receiving
-  - Clean shutdown in 83ms
-  - Production-ready systemd integration
-  - Wrapper script for robust service management
 
-### ⚙️ OpenClaw Config
-- **Purpose:** AI assistant configuration
-- **Model:** zai/glm-4.7
-- **Channels:**
-  - Signal (enabled, DM policy: open)
-  - WhatsApp (configurable, allowlist only)
+**Signal Messaging Bridge**
+
+- 🔄 Automatic receiver startup with 5-retry exponential backoff
+- 📞 Phone number → UUID resolution with caching
+- 🌐 HTTP + JSON-RPC API for sending messages
+- 📡 SSE message stream for real-time receiving
+- ⚙️ Rate limiting and input validation
+- 🚀 ~10MB memory, 2s startup, 83ms shutdown
+
+---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Rust 1.70+ (for brain-server and signal-gateway)
-- Linux ARM64 (Jetson Nano) or compatible
-- OpenClaw installed
+
+- **Hardware:** NVIDIA Jetson Nano (ARM64)
+- **Software:** Debian/Ubuntu, systemd
+- **Network:** SSH access configured
 
 ### Installation
 
-1. **Clone repository:**
-   ```bash
-   git clone https://github.com/markfietje/jetson-openclaw-setup.git
-   cd jetson-openclaw-setup
-   ```
-
-2. **Install Brain Server:**
-   ```bash
-   cd services/brain-server
-   cargo build --release
-   sudo cp target/release/brain-server /usr/local/bin/
-   ```
-
-3. **Install Signal Gateway:**
-   ```bash
-   cd services/signal-gateway
-   cargo build --release
-   sudo cp target/release/signal-gateway /usr/local/bin/
-   ```
-
-4. **Install wrapper script:**
-   ```bash
-   sudo cp scripts/signal-gateway-wrapper.sh /usr/local/bin/
-   sudo chmod +x /usr/local/bin/signal-gateway-wrapper.sh
-   ```
-
-5. **Install systemd service:**
-   ```bash
-   sudo cp services/openclaw-config/signal-gateway.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable signal-gateway.service
-   sudo systemctl start signal-gateway.service
-   ```
-
-## 📊 Current Status
-
-| Service | Version | Status | Uptime |
-|---------|---------|--------|--------|
-| Brain Server | v0.8.0 | ✅ Active | Stable |
-| Signal Gateway | v0.1.0 | ✅ Active | Production-ready |
-| OpenClaw | v2026.2.22-2 | ✅ Active | Stable |
-
-## 🔧 Development
-
-### Running Tests
+**Option 1: Debian Package (Recommended)**
 
 ```bash
-# Test brain-server
-cd services/brain-server && cargo test
+# Download latest release
+wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/brain-server_0.8.1_arm64.deb
+wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/signal-gateway_0.1.1_arm64.deb
 
-# Test signal-gateway
-cd services/signal-gateway && cargo test
+# Install packages
+sudo dpkg -i brain-server_0.8.1_arm64.deb
+sudo dpkg -i signal-gateway_0.1.1_arm64.deb
+
+# Services auto-start and enable
 ```
 
-### Building for Release
+**Option 2: Binary Installation**
 
 ```bash
-# Brain Server (ARM64 Cortex-A57 optimized)
-cd services/brain-server
-RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" cargo build --release -j 1
+# Download and extract
+wget https://github.com/markfietje/jetson-openclaw-setup/releases/latest/download/brain-server-arm64.tar.gz
+tar xzf brain-server-arm64.tar.gz
+sudo mv brain-server /usr/local/bin/
 
-# Signal Gateway
-cd services/signal-gateway
-cargo build --release
+# Install systemd service (manual setup required)
+sudo systemctl enable brain-server
+sudo systemctl start brain-server
 ```
 
-## 📝 Configuration
+### Verify Installation
 
-### Brain Server
-- **Config:** `services/brain-server/config/`
-- **Database:** `~/.brain-server/brain.db`
-- **Port:** 8765
-- **Health:** http://127.0.0.1:8765/health
+```bash
+# Check service status
+sudo systemctl status brain-server signal-gateway
 
-### Signal Gateway
-- **Config:** `/etc/signal-gateway/config.yaml`
-- **Port:** 8080
-- **Wrapper:** `/usr/local/bin/signal-gateway-wrapper.sh`
-- **Health:** http://127.0.0.1:8080/v1/health
-
-### OpenClaw
-- **Config:** `services/openclaw-config/config.yaml`
-- **Gateway Port:** 18789
-
-## 🛡️ Security
-
-- ✅ All services bind to loopback (127.0.0.1)
-- ✅ No internet exposure
-- ✅ Fail2Ban enabled for SSH
-- ✅ Systemd hardening (NoNewPrivileges, ProtectSystem, etc.)
-- ✅ Prompt injection detection in brain-server
-- ✅ SQL injection prevention with parameterized queries
-- ✅ **Security Audit:** A+ rating
-
-## 📈 Performance
-
-### Brain Server
-- **Memory:** 25% (1,043MB / 4,156MB)
-- **Query speed:** <1ms per search
-- **Database size:** ~10MB (compressed, indexed)
-- **Entries:** 1,293 knowledge chunks
-- **Knowledge Graph:** 461 entities, 779 relationships
-
-### Signal Gateway
-- **Memory:** ~10MB
-- **Startup time:** ~2 seconds
-- **Shutdown time:** 83ms (instant!)
-- **Retry logic:** 5 attempts with exponential backoff
-
-## 🤝 Contributing
-
-This is a personal repository for Mark'\''s AI infrastructure. For questions or collaborations, please open an issue.
-
-## 📄 License
-
-Private repository - All rights reserved
-
-## 👤 Author
-
-**Mark** - [GitHub](https://github.com/markfietje)
+# Test health endpoints
+curl http://localhost:8765/health     # Brain Server
+curl http://localhost:8080/v1/health  # Signal Gateway
+```
 
 ---
 
+## 📦 Services
+
+| Service | Version | Port | Purpose |
+|---------|---------|------|---------|
+| 🧠 Brain Server | v0.8.1 | 8765 | Knowledge graph & semantic search |
+| 📡 Signal Gateway | v0.1.1 | 8080 | Signal messaging bridge |
+
+---
+
+## 🔧 Configuration
+
+### Brain Server
+
+**Config:** `/etc/brain-server/config.toml`
+
+```toml
+[server]
+host = "127.0.0.1"
+port = 8765
+
+[database]
+path = "/var/lib/brain-server/db/brain.db"
+
+[embedding]
+model = "minishlab/potion-retrieval-32M"
+```
+
+### Signal Gateway
+
+**Config:** `/etc/signal-gateway/config.toml`
+
+```toml
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[signal]
+data_dir = "/var/lib/signal-gateway/signal-data"
+# phone_number = "+1234567890"  # Required for first-time setup
+
+[brain_server]
+url = "http://127.0.0.1:8765"
+```
+
+---
+
+## 🛡️ Security
+
+- ✅ **Loopback-only binding** - No internet exposure
+- ✅ **Systemd hardening** - NoNewPrivileges, ProtectSystem, ProtectHome
+- ✅ **CORS protection** - Environment-based origin validation
+- ✅ **Input validation** - SQL injection prevention, message validation
+- ✅ **Rate limiting** - DoS protection
+- ✅ **Dedicated users** - Service isolation with system users
+- ✅ **Security audit** - A+ rating
+
+---
+
+## 📊 Performance
+
+### Brain Server
+- **Memory:** 1,043 MB (25% of 4 GB)
+- **Query Speed:** <1ms per search
+- **Database:** ~10 MB (compressed, indexed)
+- **Startup:** ~3 seconds
+
+### Signal Gateway
+- **Memory:** ~10 MB
+- **Startup:** ~2 seconds
+- **Shutdown:** 83 ms
+- **Retry Logic:** 5 attempts with exponential backoff
+
+---
+
+## 🔨 Development
+
+### Build from Source
+
+```bash
+# Clone repository
+git clone https://github.com/markfietje/jetson-openclaw-setup.git
+cd jetson-openclaw-setup
+
+# Build ARM64 binaries (requires cross-compilation tools)
+./scripts/build-deb-packages.sh
+
+# Or build individual services
+cd services/brain-server
+cargo build --release --target aarch64-unknown-linux-gnu
+```
+
+### Run Tests
+
+```bash
+# Brain Server
+cd services/brain-server
+cargo test --release
+cargo clippy -- -D warnings
+
+# Signal Gateway
+cd services/signal-gateway
+cargo test --release
+cargo clippy -- -D warnings
+```
+
+---
+
+## 📚 Documentation
+
+- 📖 [**CHANGELOG.md**](CHANGELOG.md) - Version history and release notes
+- 📦 [**packages/README.md**](packages/README.md) - Debian package guide
+- 🚀 [**docs/RELEASE-WORKFLOW.md**](docs/RELEASE-WORKFLOW.md) - Release process
+- 🔧 [**API Documentation**](docs/API.md) - API endpoints and usage
+
+---
+
+## 🚢 Deployment
+
+### Automated Deployment
+
+Push a tag to trigger the release workflow:
+
+```bash
+git tag v0.9.0
+git push origin v0.9.0
+```
+
+The workflow will:
+1. ✅ Run tests and validation
+2. 📝 Generate comprehensive changelog
+3. 🏗️ Build ARM64 binaries
+4. 📦 Create Debian packages
+5. 🚀 Deploy to GitHub Releases
+6. 🎯 Deploy to Jetson Nano (automatic)
+
+### Manual Deployment
+
+```bash
+# Copy package to Jetson
+scp brain-server_0.8.1_arm64.deb jetson@jetson:/tmp/
+
+# Install on Jetson
+ssh jetson@jetson "sudo dpkg -i /tmp/brain-server_0.8.1_arm64.deb"
+```
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our contributing guidelines:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+**Code Standards:**
+- ✅ Zero clippy warnings (`cargo clippy -- -D warnings`)
+- ✅ Formatted code (`cargo fmt -- --check`)
+- ✅ All tests passing (`cargo test`)
+- ✅ Update documentation
+
+---
+
+## 📄 License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+---
+
+## 📈 Status
+
+| Component | Status | Version |
+|-----------|--------|---------|
+| Brain Server | ✅ Production Ready | v0.8.1 |
+| Signal Gateway | ✅ Production Ready | v0.1.1 |
+| CI/CD Pipeline | ✅ Active | - |
+| Security Audit | ✅ A+ Rating | - |
+
+---
+
+## 👤 Author
+
+**Mark Fietje**
+- GitHub: [@markfietje](https://github.com/markfietje)
+
+---
+
+## 🙏 Acknowledgments
+
+- [OpenClaw](https://github.com/openclaw) - AI assistant framework
+- [model2vec-rs](https://github.com/leeeeeeeem/model2vec-rs) - Embedding engine
+- [presage](https://github.com/whisperfish/presage) - Signal library
+- NVIDIA Jetson Community
+
+---
+
+<div align="center">
+
 **Built with ❤️ and ☕ on Jetson Nano**
 
-**📖 See [CHANGELOG.md](CHANGELOG.md) for version history!**
+**[⬆ Back to Top](#-jetson-openclaw-setup)**
+
+</div>
