@@ -1,4 +1,4 @@
-name: Production-Ready CI/CD (Enterprise-Grade)
+name: Production-Ready CI/CD
 
 on:
   push:

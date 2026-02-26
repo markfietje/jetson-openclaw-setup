@@ -1,4 +1,4 @@
-name: Brain Server CI (Enterprise-Grade)
+name: Brain Server CI
 
 on:
   push:

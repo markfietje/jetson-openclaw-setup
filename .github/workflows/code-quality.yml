@@ -1,4 +1,4 @@
-name: Code Quality (Enterprise-Grade)
+name: Code Quality
 
 on:
   push:

@@ -1,4 +1,4 @@
-name: Auto Deploy to Jetson (Enterprise-Grade)
+name: Auto Deploy to Jetson
 
 on:
   push:

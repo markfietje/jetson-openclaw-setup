@@ -1,4 +1,4 @@
-name: Signal Gateway CI (Enterprise-Grade)
+name: Signal Gateway CI
 
 on:
   push:

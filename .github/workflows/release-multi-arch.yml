@@ -1,4 +1,4 @@
-name: Multi-Architecture Release (ARM64 + AMD64)
+name: Release (Multi-Architecture)
 
 on:
   push:

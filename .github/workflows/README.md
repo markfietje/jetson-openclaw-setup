@@ -2,6 +2,64 @@
 
 Enterprise-grade CI/CD pipeline for the Jetson AI infrastructure.
 
+## 🍎 macOS Runner Setup with Apple Containers
+
+**Quick Setup Guide:** Use macOS Tahoe's built-in container framework as a Docker drop-in replacement for ultra-fast CI/CD.
+
+### Setup Steps
+
+1. **Create Docker Symlink** (one-time setup):
+   ```bash
+   sudo ln -s $(which container) /usr/local/bin/docker
+   ```
+
+2. **Initialize Container System**:
+   ```bash
+   container system start
+   ```
+
+3. **Configure GitHub Runner** (as user, NOT root):
+   ```bash
+   cd ~/actions-runner
+   ./config.sh --url https://github.com/YOUR_ORG/YOUR_REPO --token YOUR_TOKEN --labels apple-container,macos
+   ./svc.sh install  # NO sudo!
+   ./svc.sh start
+   ```
+
+4. **Auto-Start on Boot** (optional):
+   ```bash
+   echo "container system start 2>/dev/null || true" >> ~/.zshrc
+   ```
+
+### Why Apple Containers?
+
+- ⚡ **Sub-second startup** - Native macOS Virtualization framework
+- 💾 **70% less memory** - No Docker Desktop overhead
+- 🎯 **Drop-in replacement** - Identical Docker CLI syntax
+- 🔒 **Better security** - User-level isolation
+- 🚀 **Native ARM64 + AMD64** - Rosetta for x86_64 containers
+
+### Usage in Workflows
+
+```yaml
+jobs:
+  build:
+    runs-on: [self-hosted, apple-container]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build with Docker (actually Apple Containers!)
+        run: |
+          docker build -t my-app .
+          docker run --rm my-app npm test
+```
+
+**📖 Full Documentation:** See [docs/macos-runner-setup.md](../../docs/macos-runner-setup.md) for detailed setup instructions, troubleshooting, and examples.
+
+**🔧 Automated Setup:** Run `./scripts/setup-macos-runner.sh` to automatically configure your macOS runner.
+
+---
+
 ## 🔄 Workflows
 
 ### CI/Testing
@@ -10,7 +68,8 @@ Enterprise-grade CI/CD pipeline for the Jetson AI infrastructure.
 - **Triggers**: Push/PR to main/dev, changes in brain-server or workflow
 - **Checks**:
   - Code formatting (rustfmt)
-  - Linting (clippy with 0 warnings)
+  - Linting (clippy with 0
+  -  warnings)
   - Unit tests with coverage reporting (tarpaulin)
   - Security audit (cargo-audit) - **FAILS on critical/high vulnerabilities**
   - Documentation completeness - **FAILS on missing docs**
