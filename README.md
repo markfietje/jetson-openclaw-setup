@@ -1,4 +1,4 @@
-# 🤖 OpenClaw AI Assistant Infrastructure
+# 🤖 OpenClaw Edge AI Platform
 
 <div align="center">
 
