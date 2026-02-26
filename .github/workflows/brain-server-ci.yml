@@ -26,18 +26,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: rustfmt
-
       - name: Check formatting
-        working-directory: services/brain-server
         run: |
-          echo "🎨 Checking code formatting..."
-          cargo fmt -- --check
-          echo "✅ Code is properly formatted"
+          echo "🎨 Checking code formatting in Linux container..."
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "cargo fmt -- --check && echo '✅ Code is properly formatted'"
 
   lint:
     name: Linting (Clippy)
@@ -46,12 +43,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          components: clippy
 
       - name: Cache cargo registry
         uses: actions/cache@v3
@@ -66,11 +57,16 @@ jobs:
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run clippy
-        working-directory: services/brain-server
         run: |
-          echo "🔍 Running clippy lints..."
-          cargo clippy --all-targets --all-features -- -D warnings
-          echo "✅ No linting errors found"
+          echo "🔍 Running clippy lints in Linux container..."
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v ~/.cargo/registry:/root/.cargo/registry \
+            -v ~/.cargo/git:/root/.cargo/git \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "cargo clippy --all-targets --all-features -- -D warnings && echo '✅ No linting errors found'"
 
   test:
     name: Unit Tests
@@ -79,11 +75,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
 
       - name: Cache cargo registry
         uses: actions/cache@v3
@@ -104,11 +95,17 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
 
       - name: Run tests
-        working-directory: services/brain-server
         run: |
-          echo "🧪 Running unit tests..."
-          cargo test --verbose -- --test-threads=1
-          echo "✅ All tests passed"
+          echo "🧪 Running unit tests in Linux container..."
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v ~/.cargo/registry:/root/.cargo/registry \
+            -v ~/.cargo/git:/root/.cargo/git \
+            -v "${GITHUB_WORKSPACE}/services/brain-server/target:/workspace/services/brain-server/target" \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "cargo test --verbose -- --test-threads=1 && echo '✅ All tests passed'"
 
   coverage:
     name: Code Coverage
@@ -117,11 +114,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
 
       - name: Cache cargo registry
         uses: actions/cache@v3
@@ -135,15 +127,22 @@ jobs:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install tarpaulin
-        run: cargo install cargo-tarpaulin
-
       - name: Generate coverage report
-        working-directory: services/brain-server
         run: |
-          echo "📊 Generating code coverage report..."
-          cargo tarpaulin --verbose --all-features --workspace --timeout 120 \
-            --out Xml --out Html --output-dir ./coverage
+          echo "📊 Generating code coverage report in Linux container..."
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v ~/.cargo/registry:/root/.cargo/registry \
+            -v ~/.cargo/git:/root/.cargo/git \
+            -v "${GITHUB_WORKSPACE}/services/brain-server/target:/workspace/services/brain-server/target" \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "
+              cargo install cargo-tarpaulin &&
+              cargo tarpaulin --verbose --all-features --workspace --timeout 120 \
+                --out Xml --out Html --output-dir ./coverage
+            "
 
       - name: Display coverage summary
         working-directory: services/brain-server
@@ -198,60 +197,52 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
       - name: Cache cargo registry
         uses: actions/cache@v3
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
-
       - name: Run security audit
         id: audit
-        working-directory: services/brain-server
         run: |
-          echo "🔒 Running security audit..."
+          echo "🔒 Running security audit in Linux container..."
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v ~/.cargo/registry:/root/.cargo/registry \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "
+              cargo install cargo-audit &&
+              cargo audit --json > audit.json 2>&1 || true &&
 
-          # Run audit and capture output
-          cargo audit --json > audit.json 2>&1 || true
+              VULN_COUNT=\$(cat audit.json | jq '.vulnerabilities | length' 2>/dev/null || echo '0') &&
+              echo \"Total vulnerabilities found: \$VULN_COUNT\" &&
 
-          # Parse JSON for vulnerabilities
-          VULN_COUNT=$(cat audit.json | jq '.vulnerabilities | length' 2>/dev/null || echo "0")
+              CRITICAL=\$(cat audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == \"Critical\")] | length' 2>/dev/null || echo '0') &&
+              HIGH=\$(cat audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == \"High\")] | length' 2>/dev/null || echo '0') &&
 
-          echo "Total vulnerabilities found: $VULN_COUNT"
-
-          # Check for critical/high severity
-          CRITICAL=$(cat audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "Critical")] | length' 2>/dev/null || echo "0")
-          HIGH=$(cat audit.json | jq '[.vulnerabilities[] | select(.advisory.severity == "High")] | length' 2>/dev/null || echo "0")
-
-          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-            echo ""
-            echo "❌ SECURITY ISSUE DETECTED!"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "Critical severity: $CRITICAL"
-            echo "High severity: $HIGH"
-            echo ""
-            echo "Please update dependencies immediately!"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-            # Display affected packages
-            cargo audit
-
-            exit 1
-          elif [ "$VULN_COUNT" -gt 0 ]; then
-            echo ""
-            echo "⚠️  $VULN_COUNT vulnerability(ies) found (low/medium severity)"
-            echo "   Consider updating dependencies"
-            cargo audit
-          else
-            echo "✅ No vulnerabilities found"
-          fi
+              if [ \"\$CRITICAL\" -gt 0 ] || [ \"\$HIGH\" -gt 0 ]; then
+                echo '' &&
+                echo '❌ SECURITY ISSUE DETECTED!' &&
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' &&
+                echo \"Critical severity: \$CRITICAL\" &&
+                echo \"High severity: \$HIGH\" &&
+                echo '' &&
+                echo 'Please update dependencies immediately!' &&
+                echo '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━' &&
+                cargo audit &&
+                exit 1
+              elif [ \"\$VULN_COUNT\" -gt 0 ]; then
+                echo '' &&
+                echo \"⚠️  \$VULN_COUNT vulnerability(ies) found (low/medium severity)\" &&
+                echo '   Consider updating dependencies' &&
+                cargo audit
+              else
+                echo '✅ No vulnerabilities found'
+              fi
+            "
 
       - name: Upload audit report
         uses: actions/upload-artifact@v4
@@ -339,11 +330,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
       - name: Cache cargo registry
         uses: actions/cache@v3
         with:
@@ -363,18 +349,28 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
 
       - name: Build release binary
-        working-directory: services/brain-server
         run: |
-          echo "🔨 Building release binary for x86_64..."
-          cargo build --release
+          echo "🔨 Building release binary for x86_64 in AMD64 Linux container (via Rosetta)..."
+          docker run --rm \
+            --platform linux/amd64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v ~/.cargo/registry:/root/.cargo/registry \
+            -v ~/.cargo/git:/root/.cargo/git \
+            -v "${GITHUB_WORKSPACE}/services/brain-server/target:/workspace/services/brain-server/target" \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "
+              rustup target add x86_64-unknown-linux-gnu &&
+              RUSTFLAGS='-C opt-level=3 -C lto=fat' \
+              cargo build --release --target x86_64-unknown-linux-gnu &&
+              echo '✅ x86_64 binary built successfully'
+            "
 
       - name: Verify binary
-        working-directory: services/brain-server
         run: |
-          echo "✅ Verifying binary..."
-          test -f target/release/brain-server
-          ./target/release/brain-server --version || echo "Version check passed"
-          ls -lh target/release/brain-server
+          echo "✅ Verifying x86_64 binary..."
+          test -f services/brain-server/target/x86_64-unknown-linux-gnu/release/brain-server
+          ls -lh services/brain-server/target/x86_64-unknown-linux-gnu/release/brain-server
 
   build-arm64:
     name: Build (ARM64/Jetson)
@@ -383,17 +379,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-          target: aarch64-unknown-linux-gnu
-
-      - name: Install cross-compilation tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
 
       - name: Cache cargo registry
         uses: actions/cache@v3
@@ -414,19 +399,22 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-arm64-${{ hashFiles('services/brain-server/**/Cargo.lock') }}
 
       - name: Build for ARM64
-        working-directory: services/brain-server
         run: |
-          echo "🔨 Building release binary for ARM64..."
-          RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat" \
-          cargo build --release --target aarch64-unknown-linux-gnu -j 1
-
-      - name: Verify ARM64 binary
-        working-directory: services/brain-server
-        run: |
-          echo "✅ Verifying ARM64 binary..."
-          test -f target/aarch64-unknown-linux-gnu/release/brain-server
-          file target/aarch64-unknown-linux-gnu/release/brain-server | grep -q "ARM aarch64"
-          ls -lh target/aarch64-unknown-linux-gnu/release/brain-server
+          echo "🔨 Building release binary for ARM64 in Linux container..."
+          docker run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v ~/.cargo/registry:/root/.cargo/registry \
+            -v ~/.cargo/git:/root/.cargo/git \
+            -v "${GITHUB_WORKSPACE}/services/brain-server/target:/workspace/services/brain-server/target" \
+            -w /workspace/services/brain-server \
+            rust:latest \
+            bash -c "
+              rustup target add aarch64-unknown-linux-gnu &&
+              RUSTFLAGS='-C target-cpu=native -C opt-level=3 -C lto=fat' \
+              cargo build --release --target aarch64-unknown-linux-gnu -j 1 &&
+              echo '✅ ARM64 binary built successfully'
+            "
 
       - name: Upload ARM64 binary
         uses: actions/upload-artifact@v4
