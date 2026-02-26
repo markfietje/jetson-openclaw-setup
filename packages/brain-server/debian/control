@@ -8,7 +8,7 @@ Version: 0.0.0
 Homepage: https://github.com/markfietje/jetson-openclaw-setup
 Package: brain-server
 Architecture: arm64
-Depends: ${shlibs:Depends}, ${misc:Depends}, libc6 (>= 2.31)
+Depends: libc6 (>= 2.31)
 Recommends: sqlite3
 Suggests: brain-server-doc
 Installed-Size: 20480
