@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-##[0.8.4] - 2026-02-26
+## [0.8.4] - 2026-02-26
 
 ### Infrastructure
 - Simplified to ARM64-only builds (Jetson Nano focus)
