@@ -34,12 +34,26 @@ jobs:
           cargo fmt -- --check
           echo "✅ Code is properly formatted"
 
+      - name: Fix formatting
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🎨 Auto-fixing code formatting..."
+          cargo fmt
+          echo "✅ Formatting fixed"
+
       - name: Run clippy (lint)
         working-directory: services/${{ matrix.service }}
         run: |
           echo "🔍 Running clippy lints..."
           cargo clippy --all-targets --all-features -- -D warnings
           echo "✅ No linting errors found"
+
+      - name: Fix clippy issues
+        working-directory: services/${{ matrix.service }}
+        run: |
+          echo "🔧 Auto-fixing clippy issues..."
+          cargo clippy --fix --allow-dirty --allow-staged
+          echo "✅ Clippy fixes applied"
 
       - name: Check documentation
         working-directory: services/${{ matrix.service }}
