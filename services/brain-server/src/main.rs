@@ -1594,3 +1594,53 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connection_tracker_track() {
+        let tracker = ConnectionTracker::new();
+        let id1 = tracker.track("/test1");
+        let id2 = tracker.track("/test2");
+        
+        assert_ne!(id1, id2);
+        assert_eq!(tracker.count(), 2);
+    }
+
+    #[test]
+    fn test_connection_tracker_release() {
+        let tracker = ConnectionTracker::new();
+        let id = tracker.track("/test");
+        
+        tracker.release(id);
+        
+        assert_eq!(tracker.count(), 0);
+    }
+
+    #[test]
+    fn test_connection_tracker_long_running() {
+        let tracker = ConnectionTracker::new();
+        tracker.track("/test");
+        
+        let long_running = tracker.get_long_running(std::time::Duration::from_secs(0));
+        assert_eq!(long_running.len(), 1);
+        
+        let none = tracker.get_long_running(std::time::Duration::from_secs(3600));
+        assert_eq!(none.len(), 0);
+    }
+
+    #[test]
+    fn test_rate_limiter() {
+        let limiter = RateLimiter::new();
+        
+        for _ in 0..100 {
+            assert!(limiter.is_allowed("127.0.0.1"));
+        }
+        
+        assert!(!limiter.is_allowed("127.0.0.1"));
+        
+        assert!(limiter.is_allowed("192.168.1.1"));
+    }
+}
