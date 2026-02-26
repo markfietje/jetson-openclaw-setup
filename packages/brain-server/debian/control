@@ -12,7 +12,6 @@ Depends: libc6 (>= 2.31)
 Recommends: sqlite3
 Suggests: brain-server-doc
 Installed-Size: 20480
-Maintainer: Mark Fietje <markfietje@users.noreply.github.com>
 Description: Knowledge graph and semantic search engine for Jetson AI
  Brain Server is a high-performance knowledge management system designed
  for the Jetson Nano platform. It provides semantic search capabilities

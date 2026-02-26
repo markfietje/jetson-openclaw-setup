@@ -12,7 +12,6 @@ Depends: libc6 (>= 2.31)
 Recommends: brain-server
 Suggests: signal-gateway-doc
 Installed-Size: 10240
-Maintainer: Mark Fietje <markfietje@users.noreply.github.com>
 Description: Lightweight Signal daemon for OpenClaw AI integration
  Signal Gateway is a high-performance Signal messaging bridge designed
  for the Jetson Nano platform. It provides a RESTful API and Server-Sent
