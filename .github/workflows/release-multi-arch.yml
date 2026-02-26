@@ -344,10 +344,7 @@ jobs:
           fi
 
           if [ -f "../../README.md" ]; then
-            cp "../../README.md" "$PKG_DIR/usr/share/doc/${SERVICE}/"
-          fi
-
-          echo "/etc/${SERVICE}/config.toml" > "$PKG_DIR/DEBIAN/conffiles"
+          cp "../../README.md" "$PKG_DIR/usr/share/doc/${SERVICE}/"
 
           sed -i "s/Version:.*/Version: ${VERSION}/" "$PKG_DIR/DEBIAN/control"
           sed -i "s/Architecture:.*/Architecture: ${ARCH}/" "$PKG_DIR/DEBIAN/control"
