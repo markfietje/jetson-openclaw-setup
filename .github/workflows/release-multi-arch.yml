@@ -18,7 +18,7 @@ env:
 jobs:
   validate-tag:
     name: Validate Release Tag
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     outputs:
       version: ${{ steps.parse.outputs.version }}
       is_valid: ${{ steps.validate.outputs.is_valid }}
@@ -64,7 +64,7 @@ jobs:
 
   pre-release-tests:
     name: Pre-Release Tests
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs: validate-tag
     if: needs.validate-tag.outputs.is_valid == 'true'
 
@@ -137,7 +137,7 @@ jobs:
 
   generate-changelog:
     name: Generate Comprehensive Changelog
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag, pre-release-tests]
     if: always() && needs.pre-release-tests.result == 'success'
 
@@ -177,7 +177,7 @@ jobs:
 
   build-binaries:
     name: Build Binaries
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag, generate-changelog]
     if: always() && needs.generate-changelog.result == 'success'
 
@@ -242,26 +242,35 @@ jobs:
               file 'target/${{ matrix.target }}/release/${{ matrix.service }}'
             "
 
-      - name: Build optimized binary (AMD64 with Rosetta)
+      - name: Build optimized binary (AMD64 via Cross-Compilation)
         if: matrix.arch == 'amd64'
         run: |
-          echo "🏗️ Building ${{ matrix.service }} for AMD64 using Apple container with Rosetta..."
+          echo "🏗️ Building ${{ matrix.service }} for AMD64 via native cross-compilation..."
 
-          # Run build inside AMD64 Linux container with Rosetta emulation
+          # Note: We run a native ARM64 container for cross-compilation
           /usr/local/bin/container run --rm \
-            --platform ${{ matrix.platform }} \
-            --rosetta \
+            --platform linux/arm64 \
             -m 4g \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -w "/workspace/services/${{ matrix.service }}" \
             rust:latest \
             bash -c "
+              # 1. Install the AMD64 cross-compilation toolchain
+              apt-get update -qq &&
+              apt-get install -y -qq gcc-x86-64-linux-gnu &&
+              
+              # 2. Add the AMD64 target to Rust
+              rustup target add ${{ matrix.target }} &&
+              
+              # 3. Build using the cross-compiler
+              CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc \
               cargo build --release --target ${{ matrix.target }} &&
+              
               if [ ! -f 'target/${{ matrix.target }}/release/${{ matrix.service }}' ]; then
                 echo '::error::Binary not found after build';
                 exit 1;
               fi &&
-              echo '✅ Binary built successfully (AMD64 via Rosetta)' &&
+              echo '✅ Binary built successfully (AMD64 Cross-Compiled)' &&
               ls -lh 'target/${{ matrix.target }}/release/${{ matrix.service }}' &&
               file 'target/${{ matrix.target }}/release/${{ matrix.service }}'
             "
@@ -298,7 +307,7 @@ jobs:
 
   build-debian-packages:
     name: Build Debian Packages
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag, build-binaries]
     if: always() && needs.build-binaries.result == 'success'
 
@@ -416,7 +425,7 @@ jobs:
 
   create-github-release:
     name: Create GitHub Release
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs:
       [validate-tag, generate-changelog, build-binaries, build-debian-packages]
     if: always() && needs.build-debian-packages.result == 'success'
@@ -522,7 +531,7 @@ jobs:
 
   deploy-to-jetson:
     name: Deploy to Jetson Nano (ARM64)
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag, create-github-release]
     if: always() && needs.create-github-release.result == 'success'
 
@@ -782,7 +791,7 @@ jobs:
 
   release-notification:
     name: Send Release Notification
-    runs-on: apple-container
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag, create-github-release, deploy-to-jetson]
     if: always() && needs.create-github-release.result == 'success'
 
