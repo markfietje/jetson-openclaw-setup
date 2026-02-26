@@ -87,6 +87,12 @@ jobs:
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install protobuf compiler
+        run: |
+          echo "📦 Installing protobuf compiler..."
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq protobuf-compiler
+
       - name: Test brain-server
         working-directory: services/brain-server
         run: |
