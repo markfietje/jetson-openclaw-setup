@@ -87,27 +87,46 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install protobuf compiler
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Test brain-server
-        working-directory: services/brain-server
+      - name: Pull Rust container image
         run: |
-          cargo test --release
-          cargo clippy -- -D warnings
-          cargo fmt -- --check
+          echo "📦 Pulling Rust container image for testing..."
+          container image pull --platform linux/arm64 rust:latest
 
-      - name: Test signal-gateway
-        working-directory: services/signal-gateway
+      - name: Run pre-release tests in container
         run: |
-          cargo test --release
-          cargo clippy -- -D warnings
-          cargo fmt -- --check
+          echo "🧪 Running tests inside Linux container with protobuf..."
 
-      - name: Verify builds
-        run: |
-          echo "✅ All tests passed"
-          echo "✅ Code quality checks passed"
+          container run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -w "/workspace" \
+            rust:latest \
+            bash -c "
+              set -e
+
+              echo '📦 Installing protobuf compiler...'
+              apt-get update && apt-get install -y protobuf-compiler
+
+              echo ''
+              echo '🧠 Testing brain-server...'
+              cd services/brain-server
+              cargo test --release
+              cargo clippy -- -D warnings
+              cargo fmt -- --check
+              echo '✅ brain-server tests passed'
+
+              echo ''
+              echo '📡 Testing signal-gateway...'
+              cd ../signal-gateway
+              cargo test --release
+              cargo clippy -- -D warnings
+              cargo fmt -- --check
+              echo '✅ signal-gateway tests passed'
+
+              echo ''
+              echo '✅ All tests passed!'
+              echo '✅ Code quality checks passed!'
+            "
 
   generate-changelog:
     name: Generate Comprehensive Changelog
