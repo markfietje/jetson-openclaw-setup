@@ -128,7 +128,7 @@ jobs:
 
           /usr/local/bin/container run --rm \
             --platform linux/arm64 \
-            -m 4g \
+            -m 4G \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -v "/tmp/run-tests.sh:/run-tests.sh:ro" \
             -w "/workspace" \
@@ -219,7 +219,7 @@ jobs:
           # Run build inside ARM64 Linux container
           /usr/local/bin/container run --rm \
             --platform ${{ matrix.platform }} \
-            -m 4g \
+            -m 4G \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -w "/workspace/services/${{ matrix.service }}" \
             rust:latest \
@@ -365,7 +365,7 @@ jobs:
 
           /usr/local/bin/container run --rm \
             --platform linux/arm64 \
-            -m 4g \
+            -m 4G \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -v "/tmp/binary:/tmp/binary:ro" \
             -v "/tmp/build-deb.sh:/build-deb.sh:ro" \
@@ -429,7 +429,7 @@ jobs:
           echo "🧮 Generating SHA256 sums inside Linux container..."
           /usr/local/bin/container run --rm \
             --platform linux/arm64 \
-            -m 4g \
+            -m 4G \
             -v "/tmp/release-assets:/assets" \
             -w "/assets" \
             alpine:latest \
