@@ -123,7 +123,7 @@ jobs:
         run: |
           echo "🧪 Running tests inside Linux container..."
 
-          container run --rm \
+          /usr/local/bin/container run --rm \
             --platform linux/arm64 \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -v "/tmp/run-tests.sh:/run-tests.sh:ro" \
@@ -204,7 +204,7 @@ jobs:
       - name: Pull Rust container image
         run: |
           echo "📦 Pulling Rust container image for ${{ matrix.platform }}..."
-          container image pull --platform ${{ matrix.platform }} rust:latest
+          /usr/local/bin/container image pull --platform ${{ matrix.platform }} rust:latest
 
       - name: Cache cargo
         uses: actions/cache@v3
@@ -221,7 +221,7 @@ jobs:
           echo "🏗️ Building ${{ matrix.service }} for ARM64 using Apple container..."
 
           # Run build inside ARM64 Linux container
-          container run --rm \
+          /usr/local/bin/container run --rm \
             --platform ${{ matrix.platform }} \
             -v "${GITHUB_WORKSPACE}:/workspace" \
             -w "/workspace/services/${{ matrix.service }}" \
@@ -243,7 +243,7 @@ jobs:
           echo "🏗️ Building ${{ matrix.service }} for AMD64 using Apple container with Rosetta..."
 
           # Run build inside AMD64 Linux container with Rosetta emulation
-          container run --rm \
+          /usr/local/bin/container run --rm \
             --platform ${{ matrix.platform }} \
             --rosetta \
             -v "${GITHUB_WORKSPACE}:/workspace" \
