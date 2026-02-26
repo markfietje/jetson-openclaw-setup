@@ -97,6 +97,9 @@ jobs:
           apt-get update -qq
           apt-get install -y -qq protobuf-compiler
 
+          echo "🔧 Installing clippy..."
+          rustup component add clippy rustfmt
+
           echo ""
           echo "🧠 Testing brain-server..."
           cd /workspace/services/brain-server
