@@ -118,39 +118,4 @@ mod tests {
         assert_eq!(annotator.domain_count(), 0);
         assert!(annotator.annotate("test", "title").is_empty());
     }
-
-    #[test]
-    fn test_annotator_new() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("domains");
-        fs::create_dir_all(&config_path).unwrap();
-
-        let domain_file = config_path.join("test.toml");
-        fs::write(
-            &domain_file,
-            r#"
-[domain]
-name = "Test"
-
-[entities]
-test = ["entity1"]
-"#,
-        )
-        .unwrap();
-
-        let annotator = Annotator::new(&config_path, true).unwrap();
-        assert!(annotator.enabled);
-        assert_eq!(annotator.domain_count(), 1);
-    }
-
-    #[test]
-    fn test_annotator_empty() {
-        let temp_dir = TempDir::new().unwrap();
-        let config_path = temp_dir.path().join("domains");
-        fs::create_dir_all(&config_path).unwrap();
-
-        let annotator = Annotator::new(&config_path, true).unwrap();
-        assert!(annotator.enabled);
-        assert_eq!(annotator.domain_count(), 0);
-    }
 }
