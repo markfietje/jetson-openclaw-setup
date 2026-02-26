@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.8.4] - 2026-02-26
+
+### Infrastructure
+- Simplified to ARM64-only builds (Jetson Nano focus)
+- All containers now use 4GB memory
+- Removed AMD64 builds - users can build from source
+- macOS runner is stateless (no local dependencies)
+
+### CI/CD
+- Skipped pre-release tests in release workflow (already run in CI)
+- Uses containers for: binary building, Debian packaging, checksums
+
+---
+
+## [0.8.3] - 2026-02-26
+
+### Infrastructure
+- Added Enterprise-Grade workflow names
+- Removed "(Enterprise-Grade)" suffix for cleaner naming
+
+---
+
 ## [0.8.2] - 2026-02-25
 
 ### Infrastructure
