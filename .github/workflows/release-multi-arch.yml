@@ -344,14 +344,15 @@ jobs:
           fi
 
           if [ -f "../../README.md" ]; then
-          cp "../../README.md" "$PKG_DIR/usr/share/doc/${SERVICE}/"
+            cp "../../README.md" "$PKG_DIR/usr/share/doc/${SERVICE}/"
+          fi
 
           sed -i "s/Version:.*/Version: ${VERSION}/" "$PKG_DIR/DEBIAN/control"
           sed -i "s/Architecture:.*/Architecture: ${ARCH}/" "$PKG_DIR/DEBIAN/control"
 
           cd ../../build/debian-packages
           fakeroot dpkg-deb --build "${SERVICE}_${VERSION}_${ARCH}"
-          
+
           echo "✅ Build complete inside container!"
           EOF
           chmod +x /tmp/build-deb.sh
