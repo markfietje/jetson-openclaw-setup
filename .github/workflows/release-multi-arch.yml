@@ -327,11 +327,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Debian packaging tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y dpkg-dev fakeroot
-
       - name: Download binary artifact
         uses: actions/download-artifact@v4
         with:
@@ -342,49 +337,48 @@ jobs:
         run: |
           cd /tmp/binary
           tar xzf ${{ matrix.service }}-${{ matrix.arch }}.tar.gz
-          ls -la
 
-      - name: Build .deb package
+      - name: Create Debian packaging script
         run: |
-          VERSION="${{ needs.validate-tag.outputs.version }}"
-          SERVICE="${{ matrix.service }}"
-          ARCH="${{ matrix.arch }}"
+          cat > /tmp/build-deb.sh << 'EOF'
+          #!/bin/bash
+          set -e
 
-          echo "Building ${SERVICE}_${VERSION}_${ARCH}.deb..."
+          VERSION=$1
+          SERVICE=$2
+          ARCH=$3
 
-          cd "packages/${SERVICE}"
+          echo "📦 Installing Debian packaging tools inside Linux container..."
+          apt-get update -qq
+          apt-get install -y -qq dpkg-dev fakeroot
 
-          # Create package directory
+          echo "🏗️ Building ${SERVICE}_${VERSION}_${ARCH}.deb..."
+          cd /workspace/packages/${SERVICE}
+
           PKG_DIR="../../build/debian-packages/${SERVICE}_${VERSION}_${ARCH}"
           rm -rf "$PKG_DIR"
           mkdir -p "$PKG_DIR/DEBIAN"
 
-          # Copy control files
           cp debian/control "$PKG_DIR/DEBIAN/"
-          cp debian/postinst "$PKG_DIR/DEBIAN/"
-          cp debian/prerm "$PKG_DIR/DEBIAN/"
-          cp debian/postrm "$PKG_DIR/DEBIAN/"
-
+          [ -f debian/postinst ] && cp debian/postinst "$PKG_DIR/DEBIAN/"
+          [ -f debian/prerm ] && cp debian/prerm "$PKG_DIR/DEBIAN/"
+          [ -f debian/postrm ] && cp debian/postrm "$PKG_DIR/DEBIAN/"
           chmod 755 "$PKG_DIR/DEBIAN/"*
 
-          # Create directory structure
           mkdir -p "$PKG_DIR/usr/local/bin"
           mkdir -p "$PKG_DIR/etc/systemd/system"
           mkdir -p "$PKG_DIR/etc/${SERVICE}"
           mkdir -p "$PKG_DIR/var/lib/${SERVICE}"
           mkdir -p "$PKG_DIR/usr/share/doc/${SERVICE}"
 
-          # Copy binary
           cp "/tmp/binary/${SERVICE}" "$PKG_DIR/usr/local/bin/"
           chmod 755 "$PKG_DIR/usr/local/bin/${SERVICE}"
 
-          # Copy systemd service
           if [ -f "${SERVICE}.service" ]; then
             cp "${SERVICE}.service" "$PKG_DIR/etc/systemd/system/"
             chmod 644 "$PKG_DIR/etc/systemd/system/${SERVICE}.service"
           fi
 
-          # Copy wrapper script for signal-gateway
           if [ "${SERVICE}" = "signal-gateway" ]; then
             if [ -f "../../scripts/signal-gateway-wrapper.sh" ]; then
               cp "../../scripts/signal-gateway-wrapper.sh" "$PKG_DIR/usr/local/bin/"
@@ -392,29 +386,35 @@ jobs:
             fi
           fi
 
-          # Copy documentation
           if [ -f "../../README.md" ]; then
             cp "../../README.md" "$PKG_DIR/usr/share/doc/${SERVICE}/"
           fi
 
-          # Create conffiles
           echo "/etc/${SERVICE}/config.toml" > "$PKG_DIR/DEBIAN/conffiles"
 
-          # Update control file with version and architecture
           sed -i "s/Version:.*/Version: ${VERSION}/" "$PKG_DIR/DEBIAN/control"
           sed -i "s/Architecture:.*/Architecture: ${ARCH}/" "$PKG_DIR/DEBIAN/control"
 
-          # Build package
           cd ../../build/debian-packages
           fakeroot dpkg-deb --build "${SERVICE}_${VERSION}_${ARCH}"
+          
+          echo "✅ Build complete inside container!"
+          EOF
+          chmod +x /tmp/build-deb.sh
 
-          if [ ! -f "${SERVICE}_${VERSION}_${ARCH}.deb" ]; then
-            echo "::error::Failed to build ${SERVICE} package"
-            exit 1
-          fi
+      - name: Run packaging script inside Apple Container
+        run: |
+          VERSION="${{ needs.validate-tag.outputs.version }}"
+          SERVICE="${{ matrix.service }}"
+          ARCH="${{ matrix.arch }}"
 
-          echo "✅ ${SERVICE}_${VERSION}_${ARCH}.deb built"
-          ls -lh "${SERVICE}_${VERSION}_${ARCH}.deb"
+          /usr/local/bin/container run --rm \
+            --platform linux/arm64 \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            -v "/tmp/binary:/tmp/binary:ro" \
+            -v "/tmp/build-deb.sh:/build-deb.sh:ro" \
+            ubuntu:22.04 \
+            bash /build-deb.sh "$VERSION" "$SERVICE" "$ARCH"
 
       - name: Upload Debian package
         uses: actions/upload-artifact@v4
@@ -473,9 +473,14 @@ jobs:
             cp /tmp/artifacts/changelog/release-notes.md /tmp/release-notes.md
           fi
 
-          # Generate comprehensive checksums
-          cd /tmp/release-assets
-          sha256sum * > SHA256SUMS.txt
+          # Generate comprehensive checksums using Alpine Linux in Apple Container
+          echo "🧮 Generating SHA256 sums inside Linux container..."
+          /usr/local/bin/container run --rm \
+            --platform linux/arm64 \
+            -v "/tmp/release-assets:/assets" \
+            -w "/assets" \
+            alpine:latest \
+            sh -c "sha256sum * > SHA256SUMS.txt"
 
           # List all assets
           echo "✅ Release assets prepared:"
