@@ -252,23 +252,7 @@ Contributions welcome! Here's how:
 
 ## 📄 License
 
-Licensed under either of
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
-
----
-
-## 📈 Project Status
-
-| Component | Status | Version | Architectures |
-|-----------|--------|---------|---------------|
-| Brain Server | ✅ Stable | v0.8.1 | ARM64, AMD64 |
-| Signal Gateway | ✅ Stable | v0.1.1 | ARM64, AMD64 |
-| CI/CD Pipeline | ✅ Active | - | Multi-arch builds |
-| Security | ✅ Good practices | - | Hardened services |
+Licensed under [Apache License, Version 2.0](LICENSE-APACHE)
 
 ---
 
