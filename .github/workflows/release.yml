@@ -231,7 +231,7 @@ jobs:
     name: Build Release Artifacts
     runs-on: ubuntu-latest
     needs: [validate-tag, generate-changelog]
-    if: always() && needs.generate-changelog.result == 'success'
+    if: false  # Disabled - ARM64 built by release-multi-arch and auto-deploy workflows
 
     strategy:
       matrix:
