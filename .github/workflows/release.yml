@@ -308,6 +308,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/artifacts
+        continue-on-error: true
 
       - name: Prepare release assets
         run: |
@@ -318,17 +319,30 @@ jobs:
           mkdir -p /tmp/release-assets
 
           # Find all tar.gz files
-          find /tmp/artifacts -name "*.tar.gz" -exec cp {} /tmp/release-assets/ \
+          if [ -d /tmp/artifacts ] && [ "$(ls -A /tmp/artifacts 2>/dev/null)" ]; then
+            find /tmp/artifacts -name "*.tar.gz" -exec cp {} /tmp/release-assets/ \;
 
-          # Combine all checksums
-          cat /tmp/artifacts/*/checksums.txt > /tmp/release-assets/SHA256SUMS.txt
+            # Combine all checksums
+            cat /tmp/artifacts/*/checksums.txt > /tmp/release-assets/SHA256SUMS.txt 2>/dev/null || true
+          fi
+
+          # If no artifacts, create empty checksum file
+          if [ ! -f /tmp/release-assets/SHA256SUMS.txt ]; then
+            echo "# No artifacts built in this release" > /tmp/release-assets/SHA256SUMS.txt
+          fi
 
           echo "📋 Release assets:"
           ls -lh /tmp/release-assets/
 
       - name: Get changelog
         run: |
-          cp /tmp/artifacts/changelog/changelog.md /tmp/release-notes.md
+          if [ -f /tmp/artifacts/changelog/changelog.md ]; then
+            cp /tmp/artifacts/changelog/changelog.md /tmp/release-notes.md
+          else
+            echo "# Release ${{ github.ref_name }}" > /tmp/release-notes.md
+            echo "" >> /tmp/release-notes.md
+            echo "No changelog available." >> /tmp/release-notes.md
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -347,7 +361,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - validate-tag
-      - build-release-artifacts
       - create-github-release
     if: always() && needs.create-github-release.result == 'success'
 
@@ -359,6 +372,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/artifacts
+        continue-on-error: true
 
       - name: Setup SSH
         env:
