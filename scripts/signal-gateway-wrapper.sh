@@ -52,6 +52,28 @@ for i in $(seq 1 "$HEALTH_TIMEOUT"); do
     sleep 1
 done
 
+# Wait for brain-server to be available
+log "Waiting for brain-server to be available..."
+BRAIN_SERVER_URL="${BRAIN_SERVER_URL:-http://127.0.0.1:8765}"
+BRAIN_TIMEOUT=30
+for i in $(seq 1 "$BRAIN_TIMEOUT"); do
+    if [ -n "$SIGNAL_RECEIVED" ]; then
+        log "Signal $SIGNAL_RECEIVED received, exiting..."
+        exit 1
+    fi
+    
+    if curl -s "${BRAIN_SERVER_URL}/health" >/dev/null 2>&1; then
+        log "Brain server is available!"
+        break
+    fi
+    
+    if [ "$i" -eq "$BRAIN_TIMEOUT" ]; then
+        log "WARNING: Brain server not available after ${BRAIN_TIMEOUT}s, continuing anyway..."
+        break
+    fi
+    sleep 1
+done
+
 # Start receiver with exponential backoff retry
 log "Starting Signal receiver..."
 RETRY_COUNT=0

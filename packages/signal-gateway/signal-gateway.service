@@ -1,9 +1,8 @@
 [Unit]
 Description=Signal Gateway - Signal ↔ OpenClaw Bridge
 Documentation=https://github.com/markfietje/jetson-openclaw-setup
-After=network-online.target brain-server.service
+After=network-online.target
 Wants=network-online.target
-Requires=brain-server.service
 
 [Service]
 Type=notify
@@ -18,7 +17,7 @@ WorkingDirectory=/var/lib/signal-gateway
 # Restart configuration
 Restart=on-failure
 RestartSec=10
-TimeoutStartSec=60
+TimeoutStartSec=120
 TimeoutStopSec=15
 
 # Environment variables
