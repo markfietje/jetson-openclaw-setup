@@ -125,7 +125,7 @@ jobs:
           cd services/brain-server && cargo build --release
           cd ../signal-gateway && cargo build --release
 
-          echo "✅ x86_64 builds successful (ARM64 built by auto-deploy)"
+          echo "✅ x86_64 builds successful"
 
   generate-changelog:
     name: Generate Changelog
@@ -231,8 +231,7 @@ jobs:
     name: Build Release Artifacts
     runs-on: ubuntu-latest
     needs: [validate-tag, generate-changelog]
-    if: always() && needs.generate-changelog.result == 'success'
-    continue-on-error: true
+    if: false  # Disabled - ARM64 built by release-multi-arch and auto-deploy workflows
 
     strategy:
       matrix:
