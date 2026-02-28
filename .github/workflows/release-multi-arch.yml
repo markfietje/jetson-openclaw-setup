@@ -559,7 +559,7 @@ jobs:
           echo "Artifacts:"
           echo "  ARM64 (Jetson Nano):"
           echo "    - brain-server_${VERSION}_arm64.deb"
-          echo "    - signal-gateway_0.1.1_arm64.deb"
+          echo "    - signal-gateway_${VERSION}_arm64.deb"
           echo "    - brain-server-arm64.tar.gz"
           echo "    - signal-gateway-arm64.tar.gz"
           echo ""
