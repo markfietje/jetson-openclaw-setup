@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [0.8.6] - 2026-02-28
+
+### CI/CD
+- Fixed release workflow to allow updating existing releases
+- Enabled Debian package building in ARM64 release workflow
+- Fixed changelog generation script failure
+
+---
+
 ## [0.8.5] - 2026-02-26
 
 ### Infrastructure
