@@ -46,7 +46,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   JETSON_USER: jetson
-  JETSON_HOST: jetson
+  JETSON_HOST: jetson.local
   DEPLOY_TIMEOUT: 300 # 5 minutes
   HEALTH_CHECK_TIMEOUT: 30 # 30 seconds
   ROLLBACK_ENABLED: ${{ github.event.inputs.rollback_enabled || 'true' }}
