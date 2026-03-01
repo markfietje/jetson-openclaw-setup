@@ -18,7 +18,7 @@ env:
 jobs:
   validate-tag:
     name: Validate Release Tag
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     outputs:
       version: ${{ steps.parse.outputs.version }}
       is_valid: ${{ steps.validate.outputs.is_valid }}
@@ -65,7 +65,7 @@ jobs:
 
   pre-release-tests:
     name: Pre-Release Tests
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     needs: validate-tag
     if: false  # Skipped - tests run in CI workflows
 
@@ -112,7 +112,7 @@ jobs:
 
   generate-changelog:
     name: Generate Changelog
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag]
     if: always() && needs.validate-tag.result == 'success'
 
@@ -212,7 +212,7 @@ jobs:
 
   build-release-artifacts:
     name: Build Release Artifacts
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     needs: [validate-tag, generate-changelog]
     if: false  # Disabled - ARM64 built by release-multi-arch and auto-deploy workflows
 
@@ -294,7 +294,7 @@ jobs:
 
   create-github-release:
     name: Create GitHub Release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     needs:
       - validate-tag
       - generate-changelog
@@ -358,7 +358,7 @@ jobs:
 
   deploy-to-jetson:
     name: Deploy Release to Jetson
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     needs:
       - validate-tag
       - create-github-release
@@ -505,7 +505,7 @@ jobs:
 
   release-notification:
     name: Send Release Notification
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, apple-container]
     needs:
       - validate-tag
       - create-github-release
